@@ -1,7 +1,7 @@
 [project]
-name = "flask-hx-stack"
+name = "sipila"
 version = "0.1.0"
-description = "Flask + HTMX starter template with admin authentication"
+description = "Sistem Peminjaman Laptop SMKIT Ihsanul Fikri Mungkid"
 authors = []
 readme = "README.md"
 requires-python = ">=3.12"
