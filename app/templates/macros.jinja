@@ -1,0 +1,48 @@
+{% macro render_field(field) %}
+  <div class="row mb-3 ml-3">
+    {{ field.label(class_='col-md-2 col-sm-3 col-form-label') }}
+    <div class="col-md-9 col-sm-8">
+      {{ field(class_='form-control' + (' is-invalid' if field.errors else '') + ' gx-10', **kwargs)|safe }}
+    </div>
+    {% if field.errors %}
+      <div class="invalid-feedback">
+        {% for error in field.errors %}
+          {{ error }}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{% macro render_notif(error, success, info) %}
+  {% if error %}
+  <div class="row">
+    <div class="col">
+        <div class="alert alert-warning alert-dismissible fade show" role="alert">
+          {{ error }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if success %}
+  <div class="row">
+    <div class="col">
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+          {{ success }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    </div>
+  </div>
+  {% endif %}
+  {% if info %}
+  <div class="row">
+    <div class="col">
+        <div class="alert alert-primary alert-dismissible fade show" role="alert">
+          {{ info }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    </div>
+  </div>
+  {% endif %}
+{% endmacro %}

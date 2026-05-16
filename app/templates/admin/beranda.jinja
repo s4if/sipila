@@ -1,0 +1,22 @@
+{% if not is_htmx %}
+    {% extends "admin/layout.jinja" %}
+    {% block title %}Beranda{% endblock %}
+{% else %}
+    <title>Beranda</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item active">Beranda</li>
+    </ol>
+</nav>
+<h1 class="h2">Selamat Datang, {{ admin_name }}</h1>
+<p>Dashboard Admin</p>
+
+{% endblock %}

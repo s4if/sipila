@@ -1,0 +1,49 @@
+# Ignore Python bytecode files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore virtual environment files
+.venv/
+venv/
+env/
+
+# Ignore IDE and editor files
+.vscode/
+.idea/
+*.iml
+
+# Ignore log files
+logs/
+
+# Ignore database files (assuming you're using SQLite)
+app.db
+
+# Ignore migration files (assuming you're using Alembic)
+alembic.ini
+migrations/
+
+# Ignore test files
+tests/
+
+# Ignore coverage files
+.coverage
+coverage.xml
+
+# Ignore node_modules (if you're using JavaScript dependencies)
+node_modules/
+
+# Ignore git files
+.git/
+.gitignore
+
+# Ignore Docker files (to avoid infinite loops)
+Dockerfile
+.dockerignore
+
+# Ignore contents of instance folder, except for config.py
+instance/**/*
+!instance/config.toml
+
+# Ignore __pycache__ folders
+**/__pycache__/

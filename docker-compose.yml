@@ -1,0 +1,12 @@
+name: flask-hx-stack
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./instance:/app/instance
+      - ./appconfig.toml:/app/appconfig.toml:ro
+    restart: unless-stopped
+    environment:
+      SECRET_KEY: "change-me-in-production"
