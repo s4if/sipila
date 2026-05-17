@@ -87,7 +87,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
                 <form id="modalHapusForm" hx-post="{{ url_for('admin.siswa_hapus') }}" style="display:inline"
-                      onsubmit="bootstrap.Modal.getInstance(document.getElementById('modalHapus')).hide()">
+                      onsubmit="tutup_modal()">
                     <input type="hidden" name="id" id="modalHapusId" value=""/>
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                     <button type="submit" class="btn btn-danger">Hapus</button>
@@ -103,7 +103,10 @@ var hapus_siswa = (id, nama) => {
     document.getElementById('modalHapusNama').textContent = nama;
     var modal = new bootstrap.Modal(document.getElementById('modalHapus'));
     modal.show();
-}
+};
+var tutup_modal = () => {
+    bootstrap.Modal.getInstance(document.getElementById('modalHapus')).hide();
+};
 </script>
 
 {% endblock %}
