@@ -4,7 +4,7 @@ from flask import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from .db import db
 from .helper import htmx, admin_required
-from .models import Admin, Student
+from .models import Admin, ClassGroup, Student
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -35,6 +35,111 @@ def ganti_password():
         notif['error'] = 'Password lama tidak sesuai'
     return render_template('admin/ganti_password.jinja', admin_name=session['admin_name'], is_htmx=htmx, **notif)
 
+# ---- Rombel (ClassGroup) CRUD ----
+
+@bp.route('/rombel')
+@admin_required
+def rombel():
+    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
+    return render_template(
+        'admin/rombel.jinja',
+        admin_name=session['admin_name'],
+        is_htmx=htmx,
+        class_groups=class_groups,
+    )
+
+@bp.route('/rombel/tambah', methods=['GET', 'POST'])
+@admin_required
+def rombel_tambah():
+    admins = Admin.query.order_by(Admin.username).all()
+    if request.method == 'GET':
+        return render_template(
+            'admin/rombel_form.jinja',
+            admin_name=session['admin_name'],
+            is_htmx=htmx,
+            class_group=None,
+            admins=admins,
+        )
+
+    notif = {}
+    class_group = ClassGroup(
+        name=request.form['name'],
+        grade_level=request.form['grade_level'],
+        major=request.form.get('major') or None,
+        homeroom_teacher_id=request.form.get('homeroom_teacher_id', type=int) or None,
+    )
+    db.session.add(class_group)
+    db.session.commit()
+    notif['success'] = 'Rombel berhasil ditambahkan'
+    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
+    response = make_response(render_template(
+        'admin/rombel.jinja',
+        admin_name=session['admin_name'],
+        is_htmx=htmx,
+        class_groups=class_groups,
+        **notif,
+    ))
+    response.headers['HX-Push-Url'] = url_for('admin.rombel')
+    return response
+
+@bp.route('/rombel/edit/<int:id>', methods=['GET', 'POST'])
+@admin_required
+def rombel_edit(id):
+    class_group = ClassGroup.query.get_or_404(id)
+    admins = Admin.query.order_by(Admin.username).all()
+    if request.method == 'GET':
+        return render_template(
+            'admin/rombel_form.jinja',
+            admin_name=session['admin_name'],
+            is_htmx=htmx,
+            class_group=class_group,
+            admins=admins,
+        )
+
+    notif = {}
+    class_group.name = request.form['name']
+    class_group.grade_level = request.form['grade_level']
+    class_group.major = request.form.get('major') or None
+    class_group.homeroom_teacher_id = request.form.get('homeroom_teacher_id', type=int) or None
+    db.session.commit()
+    notif['success'] = 'Rombel berhasil diperbarui'
+    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
+    response = make_response(render_template(
+        'admin/rombel.jinja',
+        admin_name=session['admin_name'],
+        is_htmx=htmx,
+        class_groups=class_groups,
+        **notif,
+    ))
+    response.headers['HX-Push-Url'] = url_for('admin.rombel')
+    return response
+
+@bp.route('/rombel/hapus', methods=['POST'])
+@admin_required
+def rombel_hapus():
+    id = request.form.get('id', type=int)
+    class_group = ClassGroup.query.get_or_404(id)
+    notif = {}
+    active_students = Student.query.filter_by(class_group_id=id, is_deleted=False).first()
+    if active_students:
+        notif['error'] = 'Rombel tidak dapat dihapus karena masih memiliki siswa aktif'
+    else:
+        db.session.delete(class_group)
+        db.session.commit()
+        notif['success'] = 'Rombel berhasil dihapus'
+    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
+    response = make_response(render_template(
+        'admin/rombel.jinja',
+        admin_name=session['admin_name'],
+        is_htmx=htmx,
+        class_groups=class_groups,
+        **notif,
+    ))
+    response.headers['HX-Push-Url'] = url_for('admin.rombel')
+    return response
+
+# ---- Siswa (Student) CRUD ----
+
 @bp.route('/siswa')
 @admin_required
 def siswa():
@@ -49,12 +154,14 @@ def siswa():
 @bp.route('/siswa/tambah', methods=['GET', 'POST'])
 @admin_required
 def siswa_tambah():
+    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
     if request.method == 'GET':
         return render_template(
             'admin/siswa_form.jinja',
             admin_name=session['admin_name'],
             is_htmx=htmx,
             student=None,
+            class_groups=class_groups,
         )
 
     notif = {}
@@ -66,6 +173,7 @@ def siswa_tambah():
             admin_name=session['admin_name'],
             is_htmx=htmx,
             student=None,
+            class_groups=class_groups,
             **notif,
         )
 
@@ -73,7 +181,7 @@ def siswa_tambah():
         student_id=request.form['student_id'],
         name=request.form['name'],
         password=generate_password_hash(request.form['password'], method='pbkdf2:sha256', salt_length=16),
-        class_id=request.form.get('class_id', type=int),
+        class_group_id=request.form.get('class_group_id', type=int),
         admin_note=request.form.get('admin_note'),
     )
     db.session.add(student)
@@ -94,12 +202,14 @@ def siswa_tambah():
 @admin_required
 def siswa_edit(id):
     student = Student.query.get_or_404(id)
+    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
     if request.method == 'GET':
         return render_template(
             'admin/siswa_form.jinja',
             admin_name=session['admin_name'],
             is_htmx=htmx,
             student=student,
+            class_groups=class_groups,
         )
 
     notif = {}
@@ -114,6 +224,7 @@ def siswa_edit(id):
             admin_name=session['admin_name'],
             is_htmx=htmx,
             student=student,
+            class_groups=class_groups,
             **notif,
         )
 
@@ -121,7 +232,7 @@ def siswa_edit(id):
     student.name = request.form['name']
     if request.form.get('password'):
         student.password = generate_password_hash(request.form['password'], method='pbkdf2:sha256', salt_length=16)
-    student.class_id = request.form.get('class_id', type=int)
+    student.class_group_id = request.form.get('class_group_id', type=int)
     student.admin_note = request.form.get('admin_note')
     db.session.commit()
     notif['success'] = 'Siswa berhasil diperbarui'

@@ -1,0 +1,78 @@
+{% if not is_htmx %}
+    {% extends "admin/layout.jinja" %}
+    {% block title %}{{ 'Edit Rombel' if class_group else 'Tambah Rombel' }}{% endblock %}
+{% else %}
+    <title>{{ 'Edit Rombel' if class_group else 'Tambah Rombel' }}</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('admin.rombel') }}"
+            hx-get="{{ url_for('admin.rombel') }}"
+            hx-target="#hx_content"
+            hx-swap="innerHTML">Data Rombel</a></li>
+        <li class="breadcrumb-item active">{{ 'Edit Rombel' if class_group else 'Tambah Rombel' }}</li>
+    </ol>
+</nav>
+<h1 class="h2">{{ 'Edit Rombel' if class_group else 'Tambah Rombel' }}</h1>
+
+<div class="row">
+    <div class="col">
+        <form method="POST"
+              action="{{ url_for('admin.rombel_edit', id=class_group.id) if class_group else url_for('admin.rombel_tambah') }}"
+              hx-post="{{ url_for('admin.rombel_edit', id=class_group.id) if class_group else url_for('admin.rombel_tambah') }}"
+              hx-target="#hx_content"
+              hx-swap="innerHTML">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-3">
+                <label class="form-label" for="grade_level">Tingkat</label>
+                <select class="form-select" id="grade_level" name="grade_level" required>
+                    <option value="" disabled {{ 'selected' if not class_group }}>Pilih tingkat</option>
+                    <option value="X" {{ 'selected' if class_group and class_group.grade_level == 'X' }}>X</option>
+                    <option value="XI" {{ 'selected' if class_group and class_group.grade_level == 'XI' }}>XI</option>
+                    <option value="XII" {{ 'selected' if class_group and class_group.grade_level == 'XII' }}>XII</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="major">Jurusan</label>
+                <select class="form-select" id="major" name="major">
+                    <option value="" {{ 'selected' if not class_group or not class_group.major }}>Tidak ada</option>
+                    <option value="TJKT" {{ 'selected' if class_group and class_group.major == 'TJKT' }}>TJKT</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="name">Nama / Nomor Rombel</label>
+                <input type="text" class="form-control" id="name" name="name"
+                       value="{{ class_group.name if class_group else '' }}"
+                       placeholder="Contoh: 1, 2, 3" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="homeroom_teacher_id">Wali Kelas</label>
+                <select class="form-select" id="homeroom_teacher_id" name="homeroom_teacher_id">
+                    <option value="" {{ 'selected' if not class_group or not class_group.homeroom_teacher_id }}>Belum ditentukan</option>
+                    {% for a in admins %}
+                    <option value="{{ a.id }}" {{ 'selected' if class_group and class_group.homeroom_teacher_id == a.id }}>{{ a.name or '[nama belum di set]' }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">
+                    {{ 'Simpan Perubahan' if class_group else 'Tambah Rombel' }}
+                </button>
+                <a class="btn btn-secondary ms-2"
+                   href="{{ url_for('admin.rombel') }}"
+                   hx-get="{{ url_for('admin.rombel') }}"
+                   hx-target="#hx_content"
+                   hx-swap="innerHTML">Batal</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

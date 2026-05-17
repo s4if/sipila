@@ -49,9 +49,13 @@
                        {{ 'placeholder="Password baru"' if student else 'required' }}>
             </div>
             <div class="mb-3">
-                <label class="form-label" for="class_id">Kelas</label>
-                <input type="number" class="form-control" id="class_id" name="class_id"
-                       value="{{ student.class_id if student else '' }}" required>
+                <label class="form-label" for="class_group_id">Rombel</label>
+                <select class="form-select" id="class_group_id" name="class_group_id" required>
+                    <option value="" disabled {{ 'selected' if not student or not student.class_group_id }}>Pilih rombel</option>
+                    {% for cg in class_groups %}
+                    <option value="{{ cg.id }}" {{ 'selected' if student and student.class_group_id == cg.id }}>{{ cg.display_name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="mb-3">
                 <label class="form-label" for="admin_note">Catatan Admin</label>
