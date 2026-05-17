@@ -1,0 +1,75 @@
+{% if not is_htmx %}
+    {% extends "admin/layout.jinja" %}
+    {% block title %}{{ 'Edit Siswa' if student else 'Tambah Siswa' }}{% endblock %}
+{% else %}
+    <title>{{ 'Edit Siswa' if student else 'Tambah Siswa' }}</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('admin.siswa') }}"
+            hx-get="{{ url_for('admin.siswa') }}"
+            hx-target="#hx_content"
+            hx-swap="innerHTML">Data Siswa</a></li>
+        <li class="breadcrumb-item active">{{ 'Edit Siswa' if student else 'Tambah Siswa' }}</li>
+    </ol>
+</nav>
+<h1 class="h2">{{ 'Edit Siswa' if student else 'Tambah Siswa' }}</h1>
+
+<div class="row">
+    <div class="col">
+        <form method="POST"
+              action="{{ url_for('admin.siswa_edit', id=student.id) if student else url_for('admin.siswa_tambah') }}"
+              hx-post="{{ url_for('admin.siswa_edit', id=student.id) if student else url_for('admin.siswa_tambah') }}"
+              hx-target="#hx_content"
+              hx-swap="innerHTML">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-3">
+                <label class="form-label" for="student_id">NIS</label>
+                <input type="text" class="form-control" id="student_id" name="student_id"
+                       value="{{ student.student_id if student else '' }}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="name">Nama</label>
+                <input type="text" class="form-control" id="name" name="name"
+                       value="{{ student.name if student else '' }}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="password">Password</label>
+                {% if student %}
+                <div class="form-text">Kosongkan jika tidak ingin mengubah password</div>
+                {% endif %}
+                <input type="password" class="form-control" id="password" name="password"
+                       {{ 'placeholder="Password baru"' if student else 'required' }}>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="class_id">Kelas</label>
+                <input type="number" class="form-control" id="class_id" name="class_id"
+                       value="{{ student.class_id if student else '' }}" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="admin_note">Catatan Admin</label>
+                <input type="text" class="form-control" id="admin_note" name="admin_note"
+                       value="{{ student.admin_note if student and student.admin_note else '' }}">
+            </div>
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">
+                    {{ 'Simpan Perubahan' if student else 'Tambah Siswa' }}
+                </button>
+                <a class="btn btn-secondary ms-2"
+                   href="{{ url_for('admin.siswa') }}"
+                   hx-get="{{ url_for('admin.siswa') }}"
+                   hx-target="#hx_content"
+                   hx-swap="innerHTML">Batal</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
