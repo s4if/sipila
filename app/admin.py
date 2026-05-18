@@ -3,7 +3,7 @@ from flask import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from .db import db
-from .helper import htmx, admin_required
+from .helper import htmx, admin_required, sanitize_input
 from .models import Admin, ClassGroup, Student
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -63,7 +63,7 @@ def rombel_tambah():
 
     notif = {}
     class_group = ClassGroup(
-        name=request.form['name'],
+        name=sanitize_input(request.form['name']),
         grade_level=request.form['grade_level'],
         major=request.form.get('major') or None,
         homeroom_teacher_id=request.form.get('homeroom_teacher_id', type=int) or None,
@@ -178,11 +178,11 @@ def siswa_tambah():
         )
 
     student = Student(
-        student_id=request.form['student_id'],
-        name=request.form['name'],
+        student_id=sanitize_input(request.form['student_id']),
+        name=sanitize_input(request.form['name']),
         password=generate_password_hash(request.form['password'], method='pbkdf2:sha256', salt_length=16),
         class_group_id=request.form.get('class_group_id', type=int),
-        admin_note=request.form.get('admin_note'),
+        admin_note=sanitize_input(request.form.get('admin_note')),
     )
     db.session.add(student)
     db.session.commit()

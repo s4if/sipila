@@ -29,6 +29,10 @@ class ClassGroup(db.Model):
         if self.major:
             return '{} {} {}'.format(self.grade_level, self.major, self.name)
         return '{} {}'.format(self.grade_level, self.name)
+    
+    @property
+    def active_student_count(self):
+        return Student.query.filter_by(class_group_id=self.id, is_deleted=False).count()
 
     def __repr__(self):
         return '<ClassGroup {}>'.format(self.display_name)

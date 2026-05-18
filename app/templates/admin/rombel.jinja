@@ -52,7 +52,7 @@
                     <td>{{ cg.grade_level }}</td>
                     <td>{{ cg.major or '-' }}</td>
                     <td>{{ cg.homeroom_teacher.name or '[nama belum di set]' if cg.homeroom_teacher else '-' }}</td>
-                    <td>{{ cg.students | selectattr('is_deleted', 'equalto', false) | list | length }}</td>
+                    <td>{{ cg.active_student_count }}</td>
                     <td>
                         <a class="btn btn-sm btn-warning"
                            hx-get="{{ url_for('admin.rombel_edit', id=cg.id) }}"
