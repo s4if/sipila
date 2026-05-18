@@ -77,14 +77,14 @@
                        hx-get="{{ url_for('admin.beranda') }}">
                     Beranda
                     </a>
-                    <a class="nav-link" id="nav-beranda"
-                       hx-get="{{ url_for('admin.beranda') }}">
-                    Dummy 1
+                    <a class="nav-link" id="nav-siswa"
+                       hx-get="{{ url_for('admin.siswa') }}">
+                    Siswa
                     </a>
 
-                    <a class="nav-link" id="nav-beranda"
-                       hx-get="{{ url_for('admin.beranda') }}">
-                    Dummy 2
+                    <a class="nav-link" id="nav-rombel"
+                       hx-get="{{ url_for('admin.rombel') }}">
+                    Rombel
                     </a>
                 </nav>
             </div>
@@ -102,6 +102,9 @@
       document.body.classList.add('dimmed');
     });
     document.addEventListener('htmx:afterRequest', function(event) {
+      document.body.classList.remove('dimmed');
+    });
+    document.addEventListener('htmx:afterSwap', function(event) {
       document.body.classList.remove('dimmed');
     });
     const sbToggler = document.getElementById('sb-toggler');
