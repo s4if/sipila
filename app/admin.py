@@ -1,4 +1,4 @@
-from flask import Blueprint, request, session
+from flask import Blueprint, jsonify, request, session, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
 from .db import db
 from .helper import admin_required, hx_render, sanitize_input
@@ -34,8 +34,34 @@ def ganti_password():
 @bp.route('/rombel')
 @admin_required
 def rombel():
+    return hx_render('admin/rombel.jinja')
+
+@bp.route('/rombel/data')
+@admin_required
+def rombel_data():
     class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
-    return hx_render('admin/rombel.jinja', class_groups=class_groups)
+    data = []
+    for i, cg in enumerate(class_groups, 1):
+        guru = cg.homeroom_teacher.name if cg.homeroom_teacher else '-'
+        if cg.homeroom_teacher and not cg.homeroom_teacher.name:
+            guru = '[nama belum di set]'
+        data.append({
+            'no': i,
+            'display_name': cg.display_name,
+            'grade_level': cg.grade_level,
+            'major': cg.major or '-',
+            'homeroom_teacher': guru,
+            'student_count': cg.active_student_count,
+            'actions': (
+                '<a class="btn btn-sm btn-warning" '
+                f'onclick="edit_rombel({cg.id})">'
+                '<i class="bi bi-pencil"></i> Edit</a> '
+                '<button type="button" class="btn btn-sm btn-danger" '
+                f'onclick="hapus_rombel({cg.id}, \'{cg.display_name}\')">'
+                '<i class="bi bi-trash"></i> Hapus</button>'
+            ),
+        })
+    return jsonify(data=data)
 
 @bp.route('/rombel/tambah', methods=['GET', 'POST'])
 @admin_required
@@ -54,8 +80,7 @@ def rombel_tambah():
     db.session.add(class_group)
     db.session.commit()
     notif['success'] = 'Rombel berhasil ditambahkan'
-    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
-    return hx_render('admin/rombel.jinja', push_url='admin.rombel', class_groups=class_groups, **notif)
+    return hx_render('admin/rombel.jinja', push_url='admin.rombel', **notif)
 
 @bp.route('/rombel/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
@@ -72,8 +97,7 @@ def rombel_edit(id):
     class_group.homeroom_teacher_id = request.form.get('homeroom_teacher_id', type=int) or None
     db.session.commit()
     notif['success'] = 'Rombel berhasil diperbarui'
-    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
-    return hx_render('admin/rombel.jinja', push_url='admin.rombel', class_groups=class_groups, **notif)
+    return hx_render('admin/rombel.jinja', push_url='admin.rombel', **notif)
 
 @bp.route('/rombel/hapus', methods=['POST'])
 @admin_required
@@ -88,16 +112,37 @@ def rombel_hapus():
         db.session.delete(class_group)
         db.session.commit()
         notif['success'] = 'Rombel berhasil dihapus'
-    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
-    return hx_render('admin/rombel.jinja', push_url='admin.rombel', class_groups=class_groups, **notif)
+    return hx_render('admin/rombel.jinja', push_url='admin.rombel', **notif)
 
 # ---- Siswa (Student) CRUD ----
 
 @bp.route('/siswa')
 @admin_required
 def siswa():
+    return hx_render('admin/siswa.jinja')
+
+@bp.route('/siswa/data')
+@admin_required
+def siswa_data():
     students = Student.query.filter_by(is_deleted=False).order_by(Student.id).all()
-    return hx_render('admin/siswa.jinja', students=students)
+    data = []
+    for i, student in enumerate(students, 1):
+        data.append({
+            'no': i,
+            'student_id': student.student_id,
+            'name': student.name,
+            'class_group': student.class_group.display_name if student.class_group else '-',
+            'admin_note': student.admin_note or '',
+            'actions': (
+                '<a class="btn btn-sm btn-warning" '
+                f'onclick="edit_siswa({student.id})">'
+                '<i class="bi bi-pencil"></i> Edit</a> '
+                '<button type="button" class="btn btn-sm btn-danger" '
+                f'onclick="hapus_siswa({student.id}, \'{student.name}\')">'
+                '<i class="bi bi-trash"></i> Hapus</button>'
+            ),
+        })
+    return jsonify(data=data)
 
 @bp.route('/siswa/tambah', methods=['GET', 'POST'])
 @admin_required
@@ -122,8 +167,7 @@ def siswa_tambah():
     db.session.add(student)
     db.session.commit()
     notif['success'] = 'Siswa berhasil ditambahkan'
-    students = Student.query.filter_by(is_deleted=False).order_by(Student.id).all()
-    return hx_render('admin/siswa.jinja', push_url='admin.siswa', students=students, **notif)
+    return hx_render('admin/siswa.jinja', push_url='admin.siswa', **notif)
 
 @bp.route('/siswa/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
@@ -150,8 +194,7 @@ def siswa_edit(id):
     student.admin_note = request.form.get('admin_note')
     db.session.commit()
     notif['success'] = 'Siswa berhasil diperbarui'
-    students = Student.query.filter_by(is_deleted=False).order_by(Student.id).all()
-    return hx_render('admin/siswa.jinja', push_url='admin.siswa', students=students, **notif)
+    return hx_render('admin/siswa.jinja', push_url='admin.siswa', **notif)
 
 @bp.route('/siswa/hapus', methods=['POST'])
 @admin_required
@@ -161,5 +204,4 @@ def siswa_hapus():
     student.is_deleted = True
     db.session.commit()
     notif = {'success': 'Siswa berhasil dihapus'}
-    students = Student.query.filter_by(is_deleted=False).order_by(Student.id).all()
-    return hx_render('admin/siswa.jinja', push_url='admin.siswa', students=students, **notif)
+    return hx_render('admin/siswa.jinja', push_url='admin.siswa', **notif)
