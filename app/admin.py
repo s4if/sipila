@@ -1,9 +1,7 @@
-from flask import (
-    Blueprint, make_response, render_template, request, session, url_for, redirect
-)
+from flask import Blueprint, request, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from .db import db
-from .helper import htmx, admin_required, sanitize_input
+from .helper import admin_required, hx_render, sanitize_input
 from .models import Admin, ClassGroup, Student
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -11,17 +9,13 @@ bp = Blueprint('admin', __name__, url_prefix='/admin')
 @bp.route('/')
 @admin_required
 def beranda():
-    return render_template(
-        'admin/beranda.jinja',
-        admin_name=session['admin_name'],
-        is_htmx=htmx,
-    )
+    return hx_render('admin/beranda.jinja')
 
 @bp.route('/ganti_password', methods=['GET', 'POST'])
 @admin_required
 def ganti_password():
     if request.method == 'GET':
-        return render_template('admin/ganti_password.jinja', admin_name=session['admin_name'], is_htmx=htmx)
+        return hx_render('admin/ganti_password.jinja')
 
     notif = {}
     admin = Admin.query.filter_by(username=session['admin_name']).first()
@@ -33,7 +27,7 @@ def ganti_password():
         notif['success'] = 'Password berhasil diubah'
     else:
         notif['error'] = 'Password lama tidak sesuai'
-    return render_template('admin/ganti_password.jinja', admin_name=session['admin_name'], is_htmx=htmx, **notif)
+    return hx_render('admin/ganti_password.jinja', **notif)
 
 # ---- Rombel (ClassGroup) CRUD ----
 
@@ -41,25 +35,14 @@ def ganti_password():
 @admin_required
 def rombel():
     class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
-    return render_template(
-        'admin/rombel.jinja',
-        admin_name=session['admin_name'],
-        is_htmx=htmx,
-        class_groups=class_groups,
-    )
+    return hx_render('admin/rombel.jinja', class_groups=class_groups)
 
 @bp.route('/rombel/tambah', methods=['GET', 'POST'])
 @admin_required
 def rombel_tambah():
     admins = Admin.query.order_by(Admin.username).all()
     if request.method == 'GET':
-        return render_template(
-            'admin/rombel_form.jinja',
-            admin_name=session['admin_name'],
-            is_htmx=htmx,
-            class_group=None,
-            admins=admins,
-        )
+        return hx_render('admin/rombel_form.jinja', class_group=None, admins=admins)
 
     notif = {}
     class_group = ClassGroup(
@@ -72,15 +55,7 @@ def rombel_tambah():
     db.session.commit()
     notif['success'] = 'Rombel berhasil ditambahkan'
     class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
-    response = make_response(render_template(
-        'admin/rombel.jinja',
-        admin_name=session['admin_name'],
-        is_htmx=htmx,
-        class_groups=class_groups,
-        **notif,
-    ))
-    response.headers['HX-Push-Url'] = url_for('admin.rombel')
-    return response
+    return hx_render('admin/rombel.jinja', push_url='admin.rombel', class_groups=class_groups, **notif)
 
 @bp.route('/rombel/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
@@ -88,13 +63,7 @@ def rombel_edit(id):
     class_group = ClassGroup.query.get_or_404(id)
     admins = Admin.query.order_by(Admin.username).all()
     if request.method == 'GET':
-        return render_template(
-            'admin/rombel_form.jinja',
-            admin_name=session['admin_name'],
-            is_htmx=htmx,
-            class_group=class_group,
-            admins=admins,
-        )
+        return hx_render('admin/rombel_form.jinja', class_group=class_group, admins=admins)
 
     notif = {}
     class_group.name = request.form['name']
@@ -104,15 +73,7 @@ def rombel_edit(id):
     db.session.commit()
     notif['success'] = 'Rombel berhasil diperbarui'
     class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
-    response = make_response(render_template(
-        'admin/rombel.jinja',
-        admin_name=session['admin_name'],
-        is_htmx=htmx,
-        class_groups=class_groups,
-        **notif,
-    ))
-    response.headers['HX-Push-Url'] = url_for('admin.rombel')
-    return response
+    return hx_render('admin/rombel.jinja', push_url='admin.rombel', class_groups=class_groups, **notif)
 
 @bp.route('/rombel/hapus', methods=['POST'])
 @admin_required
@@ -128,15 +89,7 @@ def rombel_hapus():
         db.session.commit()
         notif['success'] = 'Rombel berhasil dihapus'
     class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
-    response = make_response(render_template(
-        'admin/rombel.jinja',
-        admin_name=session['admin_name'],
-        is_htmx=htmx,
-        class_groups=class_groups,
-        **notif,
-    ))
-    response.headers['HX-Push-Url'] = url_for('admin.rombel')
-    return response
+    return hx_render('admin/rombel.jinja', push_url='admin.rombel', class_groups=class_groups, **notif)
 
 # ---- Siswa (Student) CRUD ----
 
@@ -144,38 +97,20 @@ def rombel_hapus():
 @admin_required
 def siswa():
     students = Student.query.filter_by(is_deleted=False).order_by(Student.id).all()
-    return render_template(
-        'admin/siswa.jinja',
-        admin_name=session['admin_name'],
-        is_htmx=htmx,
-        students=students,
-    )
+    return hx_render('admin/siswa.jinja', students=students)
 
 @bp.route('/siswa/tambah', methods=['GET', 'POST'])
 @admin_required
 def siswa_tambah():
     class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
     if request.method == 'GET':
-        return render_template(
-            'admin/siswa_form.jinja',
-            admin_name=session['admin_name'],
-            is_htmx=htmx,
-            student=None,
-            class_groups=class_groups,
-        )
+        return hx_render('admin/siswa_form.jinja', student=None, class_groups=class_groups)
 
     notif = {}
     existing = Student.query.filter_by(student_id=request.form['student_id']).first()
     if existing:
         notif['error'] = 'NIS sudah terdaftar'
-        return render_template(
-            'admin/siswa_form.jinja',
-            admin_name=session['admin_name'],
-            is_htmx=htmx,
-            student=None,
-            class_groups=class_groups,
-            **notif,
-        )
+        return hx_render('admin/siswa_form.jinja', student=None, class_groups=class_groups, **notif)
 
     student = Student(
         student_id=sanitize_input(request.form['student_id']),
@@ -188,15 +123,7 @@ def siswa_tambah():
     db.session.commit()
     notif['success'] = 'Siswa berhasil ditambahkan'
     students = Student.query.filter_by(is_deleted=False).order_by(Student.id).all()
-    response = make_response(render_template(
-        'admin/siswa.jinja',
-        admin_name=session['admin_name'],
-        is_htmx=htmx,
-        students=students,
-        **notif,
-    ))
-    response.headers['HX-Push-Url'] = url_for('admin.siswa')
-    return response
+    return hx_render('admin/siswa.jinja', push_url='admin.siswa', students=students, **notif)
 
 @bp.route('/siswa/edit/<int:id>', methods=['GET', 'POST'])
 @admin_required
@@ -204,13 +131,7 @@ def siswa_edit(id):
     student = Student.query.get_or_404(id)
     class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
     if request.method == 'GET':
-        return render_template(
-            'admin/siswa_form.jinja',
-            admin_name=session['admin_name'],
-            is_htmx=htmx,
-            student=student,
-            class_groups=class_groups,
-        )
+        return hx_render('admin/siswa_form.jinja', student=student, class_groups=class_groups)
 
     notif = {}
     existing = Student.query.filter(
@@ -219,14 +140,7 @@ def siswa_edit(id):
     ).first()
     if existing:
         notif['error'] = 'NIS sudah digunakan siswa lain'
-        return render_template(
-            'admin/siswa_form.jinja',
-            admin_name=session['admin_name'],
-            is_htmx=htmx,
-            student=student,
-            class_groups=class_groups,
-            **notif,
-        )
+        return hx_render('admin/siswa_form.jinja', student=student, class_groups=class_groups, **notif)
 
     student.student_id = request.form['student_id']
     student.name = request.form['name']
@@ -237,15 +151,7 @@ def siswa_edit(id):
     db.session.commit()
     notif['success'] = 'Siswa berhasil diperbarui'
     students = Student.query.filter_by(is_deleted=False).order_by(Student.id).all()
-    response = make_response(render_template(
-        'admin/siswa.jinja',
-        admin_name=session['admin_name'],
-        is_htmx=htmx,
-        students=students,
-        **notif,
-    ))
-    response.headers['HX-Push-Url'] = url_for('admin.siswa')
-    return response
+    return hx_render('admin/siswa.jinja', push_url='admin.siswa', students=students, **notif)
 
 @bp.route('/siswa/hapus', methods=['POST'])
 @admin_required
@@ -256,12 +162,4 @@ def siswa_hapus():
     db.session.commit()
     notif = {'success': 'Siswa berhasil dihapus'}
     students = Student.query.filter_by(is_deleted=False).order_by(Student.id).all()
-    response = make_response(render_template(
-        'admin/siswa.jinja',
-        admin_name=session['admin_name'],
-        is_htmx=htmx,
-        students=students,
-        **notif,
-    ))
-    response.headers['HX-Push-Url'] = url_for('admin.siswa')
-    return response
+    return hx_render('admin/siswa.jinja', push_url='admin.siswa', students=students, **notif)

@@ -2,7 +2,7 @@
 
 import functools
 import re
-from flask import session, redirect, url_for
+from flask import make_response, redirect, render_template, session, url_for
 
 from flask_htmx import HTMX
 
@@ -18,8 +18,6 @@ def login_required(view):
             return redirect(url_for('auth.login'))
         elif 'user_id' not in session \
             or 'username' not in session:
-            # TODO: tambah pesan flash error
-            # TODO: htmx disable hx-boost lewat server
             return redirect(url_for('admin.beranda'))
         return view(**kwargs)
     return wrapped_view
@@ -34,6 +32,15 @@ def admin_required(view):
             return redirect(url_for('auth.login_admin'))
         return view(**kwargs)
     return wrapped_view
+
+def hx_render(template, push_url=None, **kwargs):
+    kwargs.setdefault('username', session.get('username') or session.get('admin_name'))
+    kwargs.setdefault('is_htmx', htmx)
+    if push_url:
+        resp = make_response(render_template(template, **kwargs))
+        resp.headers['HX-Push-Url'] = url_for(push_url)
+        return resp
+    return render_template(template, **kwargs)
 
 def sanitize_input(input_str):
     # check if it is None then return None
