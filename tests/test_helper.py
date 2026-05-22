@@ -1,4 +1,3 @@
-import pytest
 from app.helper import sanitize_input
 
 
