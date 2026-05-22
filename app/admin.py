@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import db
+from .forms import RombelForm, SiswaForm
 from .helper import admin_required, hx_render, sanitize_input
 from .models import Admin, ClassGroup, Student
 
@@ -94,19 +95,27 @@ def rombel_data():
 @bp.route("/rombel/tambah", methods=["GET", "POST"])
 @admin_required
 def rombel_tambah():
-    admins = Admin.query.order_by(Admin.username).all()
+    form = RombelForm()
+    form.homeroom_teacher_id.choices = [("", "Belum ditentukan")] + [
+        (a.id, a.name or "[nama belum di set]")
+        for a in Admin.query.order_by(Admin.username).all()
+    ]
     if request.method == "GET":
         return hx_render(
-            "admin/rombel_form.jinja", class_group=None, admins=admins
+            "admin/rombel_form.jinja", class_group=None, form=form
+        )
+
+    if not form.validate_on_submit():
+        return hx_render(
+            "admin/rombel_form.jinja", class_group=None, form=form
         )
 
     notif = {}
     class_group = ClassGroup(
-        name=sanitize_input(request.form["name"]),
-        grade_level=request.form["grade_level"],
-        major=request.form.get("major") or None,
-        homeroom_teacher_id=request.form.get("homeroom_teacher_id", type=int)
-        or None,
+        name=sanitize_input(form.name.data),
+        grade_level=form.grade_level.data,
+        major=form.major.data or None,
+        homeroom_teacher_id=form.homeroom_teacher_id.data or None,
     )
     db.session.add(class_group)
     db.session.commit()
@@ -118,19 +127,26 @@ def rombel_tambah():
 @admin_required
 def rombel_edit(id):
     class_group = ClassGroup.query.get_or_404(id)
-    admins = Admin.query.order_by(Admin.username).all()
+    form = RombelForm(obj=class_group)
+    form.homeroom_teacher_id.choices = [("", "Belum ditentukan")] + [
+        (a.id, a.name or "[nama belum di set]")
+        for a in Admin.query.order_by(Admin.username).all()
+    ]
     if request.method == "GET":
         return hx_render(
-            "admin/rombel_form.jinja", class_group=class_group, admins=admins
+            "admin/rombel_form.jinja", class_group=class_group, form=form
+        )
+
+    if not form.validate_on_submit():
+        return hx_render(
+            "admin/rombel_form.jinja", class_group=class_group, form=form
         )
 
     notif = {}
-    class_group.name = request.form["name"]
-    class_group.grade_level = request.form["grade_level"]
-    class_group.major = request.form.get("major") or None
-    class_group.homeroom_teacher_id = (
-        request.form.get("homeroom_teacher_id", type=int) or None
-    )
+    class_group.name = form.name.data
+    class_group.grade_level = form.grade_level.data
+    class_group.major = form.major.data or None
+    class_group.homeroom_teacher_id = form.homeroom_teacher_id.data or None
     db.session.commit()
     notif["success"] = "Rombel berhasil diperbarui"
     return hx_render("admin/rombel.jinja", push_url="admin.rombel", **notif)
@@ -203,33 +219,47 @@ def siswa_data():
 @bp.route("/siswa/tambah", methods=["GET", "POST"])
 @admin_required
 def siswa_tambah():
-    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
+    form = SiswaForm()
+    form.class_group_id.choices = [("", "Pilih rombel")] + [
+        (cg.id, cg.display_name) for cg in ClassGroup.query.order_by(ClassGroup.id).all()
+    ]
     if request.method == "GET":
         return hx_render(
-            "admin/siswa_form.jinja", student=None, class_groups=class_groups
+            "admin/siswa_form.jinja", student=None, form=form
+        )
+
+    if not form.validate_on_submit():
+        return hx_render(
+            "admin/siswa_form.jinja", student=None, form=form
         )
 
     notif = {}
     existing = Student.query.filter_by(
-        student_id=request.form["student_id"]
+        student_id=form.student_id.data
     ).first()
     if existing:
         notif["error"] = "NIS sudah terdaftar"
         return hx_render(
             "admin/siswa_form.jinja",
             student=None,
-            class_groups=class_groups,
+            form=form,
             **notif,
         )
 
+    if not form.password.data:
+        form.password.errors.append("Password wajib diisi")
+        return hx_render(
+            "admin/siswa_form.jinja", student=None, form=form
+        )
+
     student = Student(
-        student_id=sanitize_input(request.form["student_id"]),
-        name=sanitize_input(request.form["name"]),
+        student_id=sanitize_input(form.student_id.data),
+        name=sanitize_input(form.name.data),
         password=generate_password_hash(
-            request.form["password"], method="pbkdf2:sha256", salt_length=16
+            form.password.data, method="pbkdf2:sha256", salt_length=16
         ),
-        class_group_id=request.form.get("class_group_id", type=int),
-        admin_note=sanitize_input(request.form.get("admin_note")),
+        class_group_id=form.class_group_id.data,
+        admin_note=sanitize_input(form.admin_note.data),
     )
     db.session.add(student)
     db.session.commit()
@@ -241,15 +271,23 @@ def siswa_tambah():
 @admin_required
 def siswa_edit(id):
     student = Student.query.get_or_404(id)
-    class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
+    form = SiswaForm(obj=student)
+    form.class_group_id.choices = [("", "Pilih rombel")] + [
+        (cg.id, cg.display_name) for cg in ClassGroup.query.order_by(ClassGroup.id).all()
+    ]
     if request.method == "GET":
         return hx_render(
-            "admin/siswa_form.jinja", student=student, class_groups=class_groups
+            "admin/siswa_form.jinja", student=student, form=form
+        )
+
+    if not form.validate_on_submit():
+        return hx_render(
+            "admin/siswa_form.jinja", student=student, form=form
         )
 
     notif = {}
     existing = Student.query.filter(
-        Student.student_id == request.form["student_id"],
+        Student.student_id == form.student_id.data,
         Student.id != id,
     ).first()
     if existing:
@@ -257,18 +295,18 @@ def siswa_edit(id):
         return hx_render(
             "admin/siswa_form.jinja",
             student=student,
-            class_groups=class_groups,
+            form=form,
             **notif,
         )
 
-    student.student_id = request.form["student_id"]
-    student.name = request.form["name"]
-    if request.form.get("password"):
+    student.student_id = form.student_id.data
+    student.name = form.name.data
+    if form.password.data:
         student.password = generate_password_hash(
-            request.form["password"], method="pbkdf2:sha256", salt_length=16
+            form.password.data, method="pbkdf2:sha256", salt_length=16
         )
-    student.class_group_id = request.form.get("class_group_id", type=int)
-    student.admin_note = request.form.get("admin_note")
+    student.class_group_id = form.class_group_id.data
+    student.admin_note = form.admin_note.data
     db.session.commit()
     notif["success"] = "Siswa berhasil diperbarui"
     return hx_render("admin/siswa.jinja", push_url="admin.siswa", **notif)

@@ -29,38 +29,54 @@
               hx-post="{{ url_for('admin.siswa_edit', id=student.id) if student else url_for('admin.siswa_tambah') }}"
               hx-target="#hx_content"
               hx-swap="innerHTML">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            {{ form.hidden_tag() }}
             <div class="mb-3">
-                <label class="form-label" for="student_id">NIS</label>
-                <input type="text" class="form-control" id="student_id" name="student_id"
-                       value="{{ student.student_id if student else '' }}" required>
+                {{ form.student_id.label(class='form-label') }}
+                {{ form.student_id(class='form-control' + (' is-invalid' if form.student_id.errors else ''), required=True) }}
+                {% if form.student_id.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.student_id.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="mb-3">
-                <label class="form-label" for="name">Nama</label>
-                <input type="text" class="form-control" id="name" name="name"
-                       value="{{ student.name if student else '' }}" required>
+                {{ form.name.label(class='form-label') }}
+                {{ form.name(class='form-control' + (' is-invalid' if form.name.errors else ''), required=True) }}
+                {% if form.name.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.name.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="mb-3">
-                <label class="form-label" for="password">Password</label>
+                {{ form.password.label(class='form-label') }}
                 {% if student %}
                 <div class="form-text">Kosongkan jika tidak ingin mengubah password</div>
                 {% endif %}
-                <input type="password" class="form-control" id="password" name="password"
-                       {{ 'placeholder="Password baru"' if student else 'required' }}>
+                {{ form.password(class='form-control' + (' is-invalid' if form.password.errors else ''), **{'required': True} if not student else {'placeholder': 'Password baru'}) }}
+                {% if form.password.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.password.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="mb-3">
-                <label class="form-label" for="class_group_id">Rombel</label>
-                <select class="form-select" id="class_group_id" name="class_group_id" required>
-                    <option value="" disabled {{ 'selected' if not student or not student.class_group_id }}>Pilih rombel</option>
-                    {% for cg in class_groups %}
-                    <option value="{{ cg.id }}" {{ 'selected' if student and student.class_group_id == cg.id }}>{{ cg.display_name }}</option>
-                    {% endfor %}
-                </select>
+                {{ form.class_group_id.label(class='form-label') }}
+                {{ form.class_group_id(class='form-select' + (' is-invalid' if form.class_group_id.errors else ''), required=True) }}
+                {% if form.class_group_id.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.class_group_id.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="mb-3">
-                <label class="form-label" for="admin_note">Catatan Admin</label>
-                <input type="text" class="form-control" id="admin_note" name="admin_note"
-                       value="{{ student.admin_note if student and student.admin_note else '' }}">
+                {{ form.admin_note.label(class='form-label') }}
+                {{ form.admin_note(class='form-control' + (' is-invalid' if form.admin_note.errors else '')) }}
+                {% if form.admin_note.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.admin_note.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="mb-3">
                 <button type="submit" class="btn btn-primary">

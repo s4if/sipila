@@ -29,37 +29,42 @@
               hx-post="{{ url_for('admin.rombel_edit', id=class_group.id) if class_group else url_for('admin.rombel_tambah') }}"
               hx-target="#hx_content"
               hx-swap="innerHTML">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            {{ form.hidden_tag() }}
             <div class="mb-3">
-                <label class="form-label" for="grade_level">Tingkat</label>
-                <select class="form-select" id="grade_level" name="grade_level" required>
-                    <option value="" disabled {{ 'selected' if not class_group }}>Pilih tingkat</option>
-                    <option value="X" {{ 'selected' if class_group and class_group.grade_level == 'X' }}>X</option>
-                    <option value="XI" {{ 'selected' if class_group and class_group.grade_level == 'XI' }}>XI</option>
-                    <option value="XII" {{ 'selected' if class_group and class_group.grade_level == 'XII' }}>XII</option>
-                </select>
+                {{ form.grade_level.label(class='form-label') }}
+                {{ form.grade_level(class='form-select' + (' is-invalid' if form.grade_level.errors else ''), required=True) }}
+                {% if form.grade_level.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.grade_level.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="mb-3">
-                <label class="form-label" for="major">Jurusan</label>
-                <select class="form-select" id="major" name="major">
-                    <option value="" {{ 'selected' if not class_group or not class_group.major }}>Tidak ada</option>
-                    <option value="TJKT" {{ 'selected' if class_group and class_group.major == 'TJKT' }}>TJKT</option>
-                </select>
+                {{ form.major.label(class='form-label') }}
+                {{ form.major(class='form-select' + (' is-invalid' if form.major.errors else '')) }}
+                {% if form.major.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.major.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="mb-3">
-                <label class="form-label" for="name">Nama / Nomor Rombel</label>
-                <input type="text" class="form-control" id="name" name="name"
-                       value="{{ class_group.name if class_group else '' }}"
-                       placeholder="Contoh: 1, 2, 3" required>
+                {{ form.name.label(class='form-label') }}
+                {{ form.name(class='form-control' + (' is-invalid' if form.name.errors else ''), required=True, placeholder='Contoh: 1, 2, 3') }}
+                {% if form.name.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.name.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="mb-3">
-                <label class="form-label" for="homeroom_teacher_id">Wali Kelas</label>
-                <select class="form-select" id="homeroom_teacher_id" name="homeroom_teacher_id">
-                    <option value="" {{ 'selected' if not class_group or not class_group.homeroom_teacher_id }}>Belum ditentukan</option>
-                    {% for a in admins %}
-                    <option value="{{ a.id }}" {{ 'selected' if class_group and class_group.homeroom_teacher_id == a.id }}>{{ a.name or '[nama belum di set]' }}</option>
-                    {% endfor %}
-                </select>
+                {{ form.homeroom_teacher_id.label(class='form-label') }}
+                {{ form.homeroom_teacher_id(class='form-select' + (' is-invalid' if form.homeroom_teacher_id.errors else '')) }}
+                {% if form.homeroom_teacher_id.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.homeroom_teacher_id.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
             </div>
             <div class="mb-3">
                 <button type="submit" class="btn btn-primary">
