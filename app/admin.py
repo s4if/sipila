@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request, session, url_for
+from flask import Blueprint, jsonify, request, session
 from werkzeug.security import generate_password_hash, check_password_hash
 from .db import db
 from .helper import admin_required, hx_render, sanitize_input
@@ -57,7 +57,7 @@ def rombel_data():
                 f'onclick="edit_rombel({cg.id})">'
                 '<i class="bi bi-pencil"></i> Edit</a> '
                 '<button type="button" class="btn btn-sm btn-danger" '
-                f'onclick="hapus_rombel({cg.id}, \'{cg.display_name}\')">'
+                f'onclick="hapus_rombel({cg.id}, \'{sanitize_input(cg.display_name)}\')">'
                 '<i class="bi bi-trash"></i> Hapus</button>'
             ),
         })
@@ -138,7 +138,7 @@ def siswa_data():
                 f'onclick="edit_siswa({student.id})">'
                 '<i class="bi bi-pencil"></i> Edit</a> '
                 '<button type="button" class="btn btn-sm btn-danger" '
-                f'onclick="hapus_siswa({student.id}, \'{student.name}\')">'
+                f'onclick="hapus_siswa({student.id}, \'{sanitize_input(student.name)}\')">'
                 '<i class="bi bi-trash"></i> Hapus</button>'
             ),
         })
