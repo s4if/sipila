@@ -42,9 +42,7 @@ def rombel_data():
     class_groups = ClassGroup.query.order_by(ClassGroup.id).all()
     data = []
     for i, cg in enumerate(class_groups, 1):
-        guru = cg.homeroom_teacher.name if cg.homeroom_teacher else '-'
-        if cg.homeroom_teacher and not cg.homeroom_teacher.name:
-            guru = '[nama belum di set]'
+        guru = (cg.homeroom_teacher.name or '[nama belum di set]') if cg.homeroom_teacher else '-'
         data.append({
             'no': i,
             'display_name': cg.display_name,
