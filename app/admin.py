@@ -2,8 +2,13 @@ from flask import Blueprint, jsonify, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import db
-from .forms import RombelForm, SiswaForm
-from .helper import admin_required, hx_render, sanitize_input
+from .forms import GuruForm, RombelForm, SiswaForm
+from .helper import (
+    admin_required,
+    hx_render,
+    sanitize_input,
+    superadmin_required,
+)
 from .models import Admin, ClassGroup, Student
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -93,7 +98,7 @@ def rombel_data():
 
 
 @bp.route("/rombel/tambah", methods=["GET", "POST"])
-@admin_required
+@superadmin_required
 def rombel_tambah():
     form = RombelForm()
     form.homeroom_teacher_id.choices = [("", "Belum ditentukan")] + [
@@ -101,14 +106,10 @@ def rombel_tambah():
         for a in Admin.query.order_by(Admin.username).all()
     ]
     if request.method == "GET":
-        return hx_render(
-            "admin/rombel_form.jinja", class_group=None, form=form
-        )
+        return hx_render("admin/rombel_form.jinja", class_group=None, form=form)
 
     if not form.validate_on_submit():
-        return hx_render(
-            "admin/rombel_form.jinja", class_group=None, form=form
-        )
+        return hx_render("admin/rombel_form.jinja", class_group=None, form=form)
 
     notif = {}
     class_group = ClassGroup(
@@ -124,7 +125,7 @@ def rombel_tambah():
 
 
 @bp.route("/rombel/edit/<int:id>", methods=["GET", "POST"])
-@admin_required
+@superadmin_required
 def rombel_edit(id):
     class_group = ClassGroup.query.get_or_404(id)
     form = RombelForm(obj=class_group)
@@ -153,7 +154,7 @@ def rombel_edit(id):
 
 
 @bp.route("/rombel/hapus", methods=["POST"])
-@admin_required
+@superadmin_required
 def rombel_hapus():
     id = request.form.get("id", type=int)
     class_group = ClassGroup.query.get_or_404(id)
@@ -182,7 +183,7 @@ def siswa():
 
 
 @bp.route("/siswa/data")
-@admin_required
+@superadmin_required
 def siswa_data():
     from sqlalchemy.orm import joinedload
 
@@ -217,26 +218,21 @@ def siswa_data():
 
 
 @bp.route("/siswa/tambah", methods=["GET", "POST"])
-@admin_required
+@superadmin_required
 def siswa_tambah():
     form = SiswaForm()
     form.class_group_id.choices = [("", "Pilih rombel")] + [
-        (cg.id, cg.display_name) for cg in ClassGroup.query.order_by(ClassGroup.id).all()
+        (cg.id, cg.display_name)
+        for cg in ClassGroup.query.order_by(ClassGroup.id).all()
     ]
     if request.method == "GET":
-        return hx_render(
-            "admin/siswa_form.jinja", student=None, form=form
-        )
+        return hx_render("admin/siswa_form.jinja", student=None, form=form)
 
     if not form.validate_on_submit():
-        return hx_render(
-            "admin/siswa_form.jinja", student=None, form=form
-        )
+        return hx_render("admin/siswa_form.jinja", student=None, form=form)
 
     notif = {}
-    existing = Student.query.filter_by(
-        student_id=form.student_id.data
-    ).first()
+    existing = Student.query.filter_by(student_id=form.student_id.data).first()
     if existing:
         notif["error"] = "NIS sudah terdaftar"
         return hx_render(
@@ -248,9 +244,7 @@ def siswa_tambah():
 
     if not form.password.data:
         form.password.errors.append("Password wajib diisi")
-        return hx_render(
-            "admin/siswa_form.jinja", student=None, form=form
-        )
+        return hx_render("admin/siswa_form.jinja", student=None, form=form)
 
     student = Student(
         student_id=sanitize_input(form.student_id.data),
@@ -268,22 +262,19 @@ def siswa_tambah():
 
 
 @bp.route("/siswa/edit/<int:id>", methods=["GET", "POST"])
-@admin_required
+@superadmin_required
 def siswa_edit(id):
     student = Student.query.get_or_404(id)
     form = SiswaForm(obj=student)
     form.class_group_id.choices = [("", "Pilih rombel")] + [
-        (cg.id, cg.display_name) for cg in ClassGroup.query.order_by(ClassGroup.id).all()
+        (cg.id, cg.display_name)
+        for cg in ClassGroup.query.order_by(ClassGroup.id).all()
     ]
     if request.method == "GET":
-        return hx_render(
-            "admin/siswa_form.jinja", student=student, form=form
-        )
+        return hx_render("admin/siswa_form.jinja", student=student, form=form)
 
     if not form.validate_on_submit():
-        return hx_render(
-            "admin/siswa_form.jinja", student=student, form=form
-        )
+        return hx_render("admin/siswa_form.jinja", student=student, form=form)
 
     notif = {}
     existing = Student.query.filter(
@@ -313,7 +304,7 @@ def siswa_edit(id):
 
 
 @bp.route("/siswa/hapus", methods=["POST"])
-@admin_required
+@superadmin_required
 def siswa_hapus():
     id = request.form.get("id", type=int)
     student = Student.query.get_or_404(id)
@@ -321,3 +312,122 @@ def siswa_hapus():
     db.session.commit()
     notif = {"success": "Siswa berhasil dihapus"}
     return hx_render("admin/siswa.jinja", push_url="admin.siswa", **notif)
+
+
+# ---- Guru (Admin) CRUD ----
+
+
+@bp.route("/guru")
+@superadmin_required
+def guru():
+    return hx_render("admin/guru.jinja")
+
+
+@bp.route("/guru/data")
+@superadmin_required
+def guru_data():
+    admins = Admin.query.order_by(Admin.id).all()
+    data = []
+    for i, a in enumerate(admins, 1):
+        role = "Superadmin" if a.is_superadmin else "Admin"
+        data.append(
+            {
+                "no": i,
+                "username": a.username,
+                "name": a.name or "-",
+                "contact_person": a.contact_person or "-",
+                "role": role,
+                "actions": (
+                    '<a class="btn btn-sm btn-warning" '
+                    f'onclick="edit_guru({a.id})">'
+                    '<i class="bi bi-pencil"></i> Edit</a> '
+                    '<button type="button" class="btn btn-sm btn-danger" '
+                    f"onclick=\"hapus_guru({a.id}, '{sanitize_input(a.username)}')\">"
+                    '<i class="bi bi-trash"></i> Hapus</button>'
+                ),
+            }
+        )
+    return jsonify(data=data)
+
+
+@bp.route("/guru/tambah", methods=["GET", "POST"])
+@superadmin_required
+def guru_tambah():
+    form = GuruForm()
+    if request.method == "GET":
+        return hx_render("admin/guru_form.jinja", guru=None, form=form)
+
+    if not form.validate_on_submit():
+        return hx_render("admin/guru_form.jinja", guru=None, form=form)
+
+    notif = {}
+    existing = Admin.query.filter_by(username=form.username.data).first()
+    if existing:
+        notif["error"] = "Username sudah digunakan"
+        return hx_render("admin/guru_form.jinja", guru=None, form=form, **notif)
+
+    if not form.password.data:
+        form.password.errors.append("Password wajib diisi")
+        return hx_render("admin/guru_form.jinja", guru=None, form=form)
+
+    admin = Admin(
+        username=sanitize_input(form.username.data),
+        name=sanitize_input(form.name.data),
+        contact_person=sanitize_input(form.contact_person.data) or None,
+        password=generate_password_hash(
+            form.password.data, method="pbkdf2:sha256", salt_length=16
+        ),
+    )
+    db.session.add(admin)
+    db.session.commit()
+    notif["success"] = "Guru berhasil ditambahkan"
+    return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+
+@bp.route("/guru/edit/<int:id>", methods=["GET", "POST"])
+@superadmin_required
+def guru_edit(id):
+    admin = Admin.query.get_or_404(id)
+    form = GuruForm(obj=admin)
+    if request.method == "GET":
+        return hx_render("admin/guru_form.jinja", guru=admin, form=form)
+
+    if not form.validate_on_submit():
+        return hx_render("admin/guru_form.jinja", guru=admin, form=form)
+
+    notif = {}
+    existing = Admin.query.filter(
+        Admin.username == form.username.data,
+        Admin.id != id,
+    ).first()
+    if existing:
+        notif["error"] = "Username sudah digunakan guru lain"
+        return hx_render(
+            "admin/guru_form.jinja", guru=admin, form=form, **notif
+        )
+
+    admin.username = sanitize_input(form.username.data)
+    admin.name = sanitize_input(form.name.data)
+    admin.contact_person = sanitize_input(form.contact_person.data) or None
+    if form.password.data:
+        admin.password = generate_password_hash(
+            form.password.data, method="pbkdf2:sha256", salt_length=16
+        )
+    db.session.commit()
+    notif["success"] = "Guru berhasil diperbarui"
+    return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+
+@bp.route("/guru/hapus", methods=["POST"])
+@superadmin_required
+def guru_hapus():
+    id = request.form.get("id", type=int)
+    admin = Admin.query.get_or_404(id)
+    notif = {}
+    if admin.username == session["admin_name"]:
+        notif["error"] = "Tidak dapat menghapus akun yang sedang digunakan"
+    else:
+        db.session.delete(admin)
+        db.session.commit()
+        notif["success"] = "Guru berhasil dihapus"
+    return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)

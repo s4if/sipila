@@ -41,10 +41,30 @@ def admin_required(view):
     return wrapped_view
 
 
+def superadmin_required(view):
+    @functools.wraps(view)
+    def wrapped_view(**kwargs):
+        if (
+            "is_admin" not in session
+            or "logged_in" not in session
+            or "admin_name" not in session
+        ):
+            return redirect(url_for("auth.login_admin"))
+        elif not session["is_admin"]:
+            session.clear()
+            return redirect(url_for("auth.login_admin"))
+        elif "is_superadmin" not in session or not session["is_superadmin"]:
+            return redirect(url_for("admin.beranda"))
+        return view(**kwargs)
+
+    return wrapped_view
+
+
 def hx_render(template, push_url=None, **kwargs):
     kwargs.setdefault(
         "username", session.get("username") or session.get("admin_name")
     )
+    kwargs.setdefault("is_superadmin", session.get("is_superadmin"))
     kwargs.setdefault("is_htmx", htmx)
     if push_url:
         resp = make_response(render_template(template, **kwargs))

@@ -1,4 +1,4 @@
-from app.helper import sanitize_input
+from app.helper import sanitize_input, superadmin_required
 
 
 class TestSanitizeInput:
@@ -87,3 +87,54 @@ class TestSanitizeInput:
         assert 'onclick' not in result
         assert '<p>' in result
         assert 'text' in result
+
+
+class TestSuperadminRequired:
+    def test_no_session_redirects_to_login(self, client):
+        response = client.get('/admin/guru')
+        assert response.status_code == 302
+        assert 'login' in response.location
+
+    def test_regular_admin_redirects_to_beranda(self, client):
+        with client.session_transaction() as sess:
+            sess['logged_in'] = True
+            sess['is_admin'] = True
+            sess['is_superadmin'] = False
+            sess['admin_name'] = 'regular'
+        response = client.get('/admin/guru')
+        assert response.status_code == 302
+        assert '/admin/' in response.location
+        assert 'login' not in response.location
+
+    def test_superadmin_allowed(self, logged_in_client):
+        response = logged_in_client.get('/admin/guru')
+        assert response.status_code == 200
+
+    def test_is_admin_false_redirects_to_login(self, client):
+        with client.session_transaction() as sess:
+            sess['logged_in'] = True
+            sess['is_admin'] = False
+            sess['is_superadmin'] = True
+            sess['admin_name'] = 'fake'
+        response = client.get('/admin/guru')
+        assert response.status_code == 302
+        assert 'login' in response.location
+
+    def test_missing_admin_name_redirects_to_login(self, client):
+        with client.session_transaction() as sess:
+            sess['logged_in'] = True
+            sess['is_admin'] = True
+            sess['is_superadmin'] = True
+        response = client.get('/admin/guru')
+        assert response.status_code == 302
+        assert 'login' in response.location
+
+    def test_missing_is_superadmin_key_redirects_to_beranda(self, client):
+        with client.session_transaction() as sess:
+            sess['logged_in'] = True
+            sess['is_admin'] = True
+            sess['admin_name'] = 'admin'
+        response = client.get('/admin/guru')
+        assert response.status_code == 302
+        assert '/admin/' in response.location
+        assert 'login' not in response.location

@@ -88,6 +88,13 @@
                        hx-get="{{ url_for('admin.rombel') }}">
                     Rombel
                     </a>
+
+                    {% if is_superadmin %}
+                    <a class="nav-link" id="nav-guru"
+                       hx-get="{{ url_for('admin.guru') }}">
+                    Guru
+                    </a>
+                    {% endif %}
                 </nav>
             </div>
             <main class="col-xl-10 col-lg-10 col-md-9 col-12 fix-padding">
