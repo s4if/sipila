@@ -69,6 +69,7 @@ def rombel_data():
         .all()
     )
 
+    is_superadmin = session.get("is_superadmin", False)
     data = []
     for i, cg in enumerate(class_groups, 1):
         guru = (
@@ -91,7 +92,9 @@ def rombel_data():
                     '<button type="button" class="btn btn-sm btn-danger" '
                     f"onclick=\"hapus_rombel({cg.id}, '{sanitize_input(cg.display_name)}')\">"
                     '<i class="bi bi-trash"></i> Hapus</button>'
-                ),
+                )
+                if is_superadmin
+                else "-",
             }
         )
     return jsonify(data=data)
@@ -183,7 +186,7 @@ def siswa():
 
 
 @bp.route("/siswa/data")
-@superadmin_required
+@admin_required
 def siswa_data():
     from sqlalchemy.orm import joinedload
 
@@ -193,6 +196,7 @@ def siswa_data():
         .order_by(Student.id)
         .all()
     )
+    is_superadmin = session.get("is_superadmin", False)
     data = []
     for i, student in enumerate(students, 1):
         data.append(
@@ -211,7 +215,9 @@ def siswa_data():
                     '<button type="button" class="btn btn-sm btn-danger" '
                     f"onclick=\"hapus_siswa({student.id}, '{sanitize_input(student.name)}')\">"
                     '<i class="bi bi-trash"></i> Hapus</button>'
-                ),
+                )
+                if is_superadmin
+                else "-",
             }
         )
     return jsonify(data=data)
