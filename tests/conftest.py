@@ -29,8 +29,8 @@ def runner(app):
 @pytest.fixture
 def admin_user(app):
     from werkzeug.security import generate_password_hash
-    from app.models import Admin
-    user = Admin(
+    from app.models import Teacher
+    user = Teacher(
         username='admin',
         password=generate_password_hash('secret'),
         is_superadmin=True,

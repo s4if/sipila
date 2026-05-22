@@ -19,9 +19,9 @@ def login_admin():
     if request.method == "GET":
         return render_template("login/index.jinja", form=form)
     else:
-        from .models import Admin
+        from .models import Teacher
 
-        a = Admin.query.filter_by(username=request.form["username"]).first()
+        a = Teacher.query.filter_by(username=request.form["username"]).first()
         if a and check_password_hash(a.password, request.form["password"]):
             session["logged_in"] = True
             session["is_admin"] = True

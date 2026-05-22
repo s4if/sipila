@@ -1,8 +1,8 @@
 from app import db
 
 
-class Admin(db.Model):
-    __tablename__ = "admins"
+class Teacher(db.Model):
+    __tablename__ = "teachers"
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), index=True, unique=True)
     password = db.Column(db.String(128))
@@ -11,7 +11,7 @@ class Admin(db.Model):
     contact_person = db.Column(db.String(20))
 
     def __repr__(self):
-        return "<Admin {}>".format(self.username)
+        return "<Teacher {}>".format(self.username)
 
 
 class ClassGroup(db.Model):
@@ -20,9 +20,9 @@ class ClassGroup(db.Model):
     name = db.Column(db.String(16), nullable=False)
     grade_level = db.Column(db.String(8), nullable=False)
     major = db.Column(db.String(64))
-    homeroom_teacher_id = db.Column(db.Integer, db.ForeignKey("admins.id"))
+    homeroom_teacher_id = db.Column(db.Integer, db.ForeignKey("teachers.id"))
 
-    homeroom_teacher = db.relationship("Admin", backref="class_groups")
+    homeroom_teacher = db.relationship("Teacher", backref="class_groups")
     students = db.relationship("Student", backref="class_group", lazy="select")
 
     @property

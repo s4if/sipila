@@ -92,8 +92,8 @@ def test_guru_tambah_success(logged_in_client, app):
     assert b'berhasil ditambahkan' in response.data
 
     with app.app_context():
-        from app.models import Admin
-        guru = Admin.query.filter_by(username='guru1').first()
+        from app.models import Teacher
+        guru = Teacher.query.filter_by(username='guru1').first()
         assert guru is not None
         assert guru.name == 'Guru Satu'
         assert guru.is_superadmin is False
@@ -136,17 +136,17 @@ def test_guru_edit_success(logged_in_client, app, admin_user):
     assert b'berhasil diperbarui' in response.data
 
     with app.app_context():
-        from app.models import Admin
-        guru = Admin.query.get(admin_user.id)
+        from app.models import Teacher
+        guru = Teacher.query.get(admin_user.id)
         assert guru.name == 'Admin Baru'
 
 
 def test_guru_edit_duplicate_username(logged_in_client, app):
     from werkzeug.security import generate_password_hash
     from app import db
-    from app.models import Admin
+    from app.models import Teacher
     with app.app_context():
-        guru2 = Admin(
+        guru2 = Teacher(
             username='guru2',
             password=generate_password_hash('pass'),
         )
@@ -174,17 +174,17 @@ def test_guru_edit_with_new_password(logged_in_client, app, admin_user):
 
     with app.app_context():
         from werkzeug.security import check_password_hash
-        from app.models import Admin
-        guru = Admin.query.get(admin_user.id)
+        from app.models import Teacher
+        guru = Teacher.query.get(admin_user.id)
         assert check_password_hash(guru.password, 'newpassword456')
 
 
 def test_guru_hapus_success(logged_in_client, app):
     from werkzeug.security import generate_password_hash
-    from app.models import Admin
+    from app.models import Teacher
     from app import db
     with app.app_context():
-        guru = Admin(
+        guru = Teacher(
             username='hapus_guru',
             password=generate_password_hash('pass'),
         )

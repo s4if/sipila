@@ -73,7 +73,7 @@ def hx_render(template, push_url=None, **kwargs):
     return render_template(template, **kwargs)
 
 
-def sanitize_input(input_str):
+def sanitize(input_str):
     # check if it is None then return None
     if input_str is None:
         return None

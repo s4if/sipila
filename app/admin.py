@@ -6,10 +6,10 @@ from .forms import GuruForm, RombelForm, SiswaForm
 from .helper import (
     admin_required,
     hx_render,
-    sanitize_input,
+    sanitize,
     superadmin_required,
 )
-from .models import Admin, ClassGroup, Student
+from .models import ClassGroup, Student, Teacher
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -27,7 +27,7 @@ def ganti_password():
         return hx_render("admin/ganti_password.jinja")
 
     notif = {}
-    admin = Admin.query.filter_by(username=session["admin_name"]).first()
+    admin = Teacher.query.filter_by(username=session["admin_name"]).first()
     if request.form["new_password"] != request.form["confirm_password"]:
         notif["error"] = "Konfirmasi password tidak sesuai"
     elif admin and check_password_hash(
@@ -90,7 +90,7 @@ def rombel_data():
                     f'onclick="edit_rombel({cg.id})">'
                     '<i class="bi bi-pencil"></i> Edit</a> '
                     '<button type="button" class="btn btn-sm btn-danger" '
-                    f"onclick=\"hapus_rombel({cg.id}, '{sanitize_input(cg.display_name)}')\">"
+                    f"onclick=\"hapus_rombel({cg.id}, '{sanitize(cg.display_name)}')\">"
                     '<i class="bi bi-trash"></i> Hapus</button>'
                 )
                 if is_superadmin
@@ -106,7 +106,7 @@ def rombel_tambah():
     form = RombelForm()
     form.homeroom_teacher_id.choices = [("", "Belum ditentukan")] + [
         (a.id, a.name or "[nama belum di set]")
-        for a in Admin.query.order_by(Admin.username).all()
+        for a in Teacher.query.order_by(Teacher.username).all()
     ]
     if request.method == "GET":
         return hx_render("admin/rombel_form.jinja", class_group=None, form=form)
@@ -116,7 +116,7 @@ def rombel_tambah():
 
     notif = {}
     class_group = ClassGroup(
-        name=sanitize_input(form.name.data),
+        name=sanitize(form.name.data),
         grade_level=form.grade_level.data,
         major=form.major.data or None,
         homeroom_teacher_id=form.homeroom_teacher_id.data or None,
@@ -134,7 +134,7 @@ def rombel_edit(id):
     form = RombelForm(obj=class_group)
     form.homeroom_teacher_id.choices = [("", "Belum ditentukan")] + [
         (a.id, a.name or "[nama belum di set]")
-        for a in Admin.query.order_by(Admin.username).all()
+        for a in Teacher.query.order_by(Teacher.username).all()
     ]
     if request.method == "GET":
         return hx_render(
@@ -213,7 +213,7 @@ def siswa_data():
                     f'onclick="edit_siswa({student.id})">'
                     '<i class="bi bi-pencil"></i> Edit</a> '
                     '<button type="button" class="btn btn-sm btn-danger" '
-                    f"onclick=\"hapus_siswa({student.id}, '{sanitize_input(student.name)}')\">"
+                    f"onclick=\"hapus_siswa({student.id}, '{sanitize(student.name)}')\">"
                     '<i class="bi bi-trash"></i> Hapus</button>'
                 )
                 if is_superadmin
@@ -253,13 +253,13 @@ def siswa_tambah():
         return hx_render("admin/siswa_form.jinja", student=None, form=form)
 
     student = Student(
-        student_id=sanitize_input(form.student_id.data),
-        name=sanitize_input(form.name.data),
+        student_id=sanitize(form.student_id.data),
+        name=sanitize(form.name.data),
         password=generate_password_hash(
             form.password.data, method="pbkdf2:sha256", salt_length=16
         ),
         class_group_id=form.class_group_id.data,
-        admin_note=sanitize_input(form.admin_note.data),
+        admin_note=sanitize(form.admin_note.data),
     )
     db.session.add(student)
     db.session.commit()
@@ -332,7 +332,7 @@ def guru():
 @bp.route("/guru/data")
 @superadmin_required
 def guru_data():
-    admins = Admin.query.order_by(Admin.id).all()
+    admins = Teacher.query.order_by(Teacher.id).all()
     data = []
     for i, a in enumerate(admins, 1):
         role = "Superadmin" if a.is_superadmin else "Admin"
@@ -348,7 +348,7 @@ def guru_data():
                     f'onclick="edit_guru({a.id})">'
                     '<i class="bi bi-pencil"></i> Edit</a> '
                     '<button type="button" class="btn btn-sm btn-danger" '
-                    f"onclick=\"hapus_guru({a.id}, '{sanitize_input(a.username)}')\">"
+                    f"onclick=\"hapus_guru({a.id}, '{sanitize(a.username)}')\">"
                     '<i class="bi bi-trash"></i> Hapus</button>'
                 ),
             }
@@ -367,7 +367,7 @@ def guru_tambah():
         return hx_render("admin/guru_form.jinja", guru=None, form=form)
 
     notif = {}
-    existing = Admin.query.filter_by(username=form.username.data).first()
+    existing = Teacher.query.filter_by(username=form.username.data).first()
     if existing:
         notif["error"] = "Username sudah digunakan"
         return hx_render("admin/guru_form.jinja", guru=None, form=form, **notif)
@@ -376,10 +376,10 @@ def guru_tambah():
         form.password.errors.append("Password wajib diisi")
         return hx_render("admin/guru_form.jinja", guru=None, form=form)
 
-    admin = Admin(
-        username=sanitize_input(form.username.data),
-        name=sanitize_input(form.name.data),
-        contact_person=sanitize_input(form.contact_person.data) or None,
+    admin = Teacher(
+        username=sanitize(form.username.data),
+        name=sanitize(form.name.data),
+        contact_person=sanitize(form.contact_person.data) or None,
         password=generate_password_hash(
             form.password.data, method="pbkdf2:sha256", salt_length=16
         ),
@@ -393,7 +393,7 @@ def guru_tambah():
 @bp.route("/guru/edit/<int:id>", methods=["GET", "POST"])
 @superadmin_required
 def guru_edit(id):
-    admin = Admin.query.get_or_404(id)
+    admin = Teacher.query.get_or_404(id)
     form = GuruForm(obj=admin)
     if request.method == "GET":
         return hx_render("admin/guru_form.jinja", guru=admin, form=form)
@@ -402,9 +402,9 @@ def guru_edit(id):
         return hx_render("admin/guru_form.jinja", guru=admin, form=form)
 
     notif = {}
-    existing = Admin.query.filter(
-        Admin.username == form.username.data,
-        Admin.id != id,
+    existing = Teacher.query.filter(
+        Teacher.username == form.username.data,
+        Teacher.id != id,
     ).first()
     if existing:
         notif["error"] = "Username sudah digunakan guru lain"
@@ -412,9 +412,9 @@ def guru_edit(id):
             "admin/guru_form.jinja", guru=admin, form=form, **notif
         )
 
-    admin.username = sanitize_input(form.username.data)
-    admin.name = sanitize_input(form.name.data)
-    admin.contact_person = sanitize_input(form.contact_person.data) or None
+    admin.username = sanitize(form.username.data)
+    admin.name = sanitize(form.name.data)
+    admin.contact_person = sanitize(form.contact_person.data) or None
     if form.password.data:
         admin.password = generate_password_hash(
             form.password.data, method="pbkdf2:sha256", salt_length=16
@@ -428,7 +428,7 @@ def guru_edit(id):
 @superadmin_required
 def guru_hapus():
     id = request.form.get("id", type=int)
-    admin = Admin.query.get_or_404(id)
+    admin = Teacher.query.get_or_404(id)
     notif = {}
     if admin.username == session["admin_name"]:
         notif["error"] = "Tidak dapat menghapus akun yang sedang digunakan"

@@ -9,7 +9,7 @@ from werkzeug.security import generate_password_hash
 from .config import APP_CONFIG, Config
 from .db import db, init_app
 from .helper import htmx
-from .models import Admin
+from .models import Teacher
 
 csrf = CSRFProtect()
 
@@ -59,7 +59,7 @@ def create_app(test_config=None):
         hashed_password = generate_password_hash(
             password, method="pbkdf2:sha256", salt_length=16
         )
-        admin_user = Admin(username=username, password=hashed_password)
+        admin_user = Teacher(username=username, password=hashed_password)
         admin_user.is_superadmin = role == "superadmin"
         db.session.add(admin_user)
         db.session.commit()
@@ -85,7 +85,7 @@ def create_app(test_config=None):
         hashed_password = generate_password_hash(
             password, method="pbkdf2:sha256", salt_length=16
         )
-        admin_user = Admin.query.filter_by(username=username).first()
+        admin_user = Teacher.query.filter_by(username=username).first()
         if admin_user is None:
             print(f"Admin user '{username}' not found!")
         else:
@@ -101,7 +101,7 @@ def create_app(test_config=None):
     )
     @with_appcontext
     def delete_admin_user(username):
-        admin_user = Admin.query.filter_by(username=username).first()
+        admin_user = Teacher.query.filter_by(username=username).first()
         if admin_user is None:
             print(f"Admin user '{username}' not found!")
         else:
