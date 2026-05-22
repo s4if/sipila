@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify, request, session
-from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from .db import db
 from .helper import admin_required, hx_render, sanitize_input
 from .models import Admin, ClassGroup, Student
@@ -46,8 +47,8 @@ def rombel():
 @bp.route("/rombel/data")
 @admin_required
 def rombel_data():
-    from sqlalchemy.orm import joinedload
     from sqlalchemy import func
+    from sqlalchemy.orm import joinedload
 
     class_groups = (
         ClassGroup.query.options(joinedload(ClassGroup.homeroom_teacher))
@@ -95,14 +96,17 @@ def rombel_data():
 def rombel_tambah():
     admins = Admin.query.order_by(Admin.username).all()
     if request.method == "GET":
-        return hx_render("admin/rombel_form.jinja", class_group=None, admins=admins)
+        return hx_render(
+            "admin/rombel_form.jinja", class_group=None, admins=admins
+        )
 
     notif = {}
     class_group = ClassGroup(
         name=sanitize_input(request.form["name"]),
         grade_level=request.form["grade_level"],
         major=request.form.get("major") or None,
-        homeroom_teacher_id=request.form.get("homeroom_teacher_id", type=int) or None,
+        homeroom_teacher_id=request.form.get("homeroom_teacher_id", type=int)
+        or None,
     )
     db.session.add(class_group)
     db.session.commit()
@@ -142,7 +146,9 @@ def rombel_hapus():
         class_group_id=id, is_deleted=False
     ).first()
     if active_students:
-        notif["error"] = "Rombel tidak dapat dihapus karena masih memiliki siswa aktif"
+        notif["error"] = (
+            "Rombel tidak dapat dihapus karena masih memiliki siswa aktif"
+        )
     else:
         db.session.delete(class_group)
         db.session.commit()
@@ -204,11 +210,16 @@ def siswa_tambah():
         )
 
     notif = {}
-    existing = Student.query.filter_by(student_id=request.form["student_id"]).first()
+    existing = Student.query.filter_by(
+        student_id=request.form["student_id"]
+    ).first()
     if existing:
         notif["error"] = "NIS sudah terdaftar"
         return hx_render(
-            "admin/siswa_form.jinja", student=None, class_groups=class_groups, **notif
+            "admin/siswa_form.jinja",
+            student=None,
+            class_groups=class_groups,
+            **notif,
         )
 
     student = Student(
