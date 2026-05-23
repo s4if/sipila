@@ -16,11 +16,11 @@ def monitor():
         try:
             tanggal = datetime.strptime(tanggal_str, "%Y-%m-%d").date()
         except ValueError:
-            tanggal = date.today()
+            tanggal = datetime.now(WIB).date()
     else:
-        tanggal = date.today()
+        tanggal = datetime.now(WIB).date()
 
-    today = date.today()
+    today = datetime.now(WIB).date()
     return hx_render(
         "supervisor/monitor.jinja",
         tanggal=tanggal,
