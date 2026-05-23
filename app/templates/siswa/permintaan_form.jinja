@@ -1,0 +1,51 @@
+{% if not is_htmx %}
+    {% extends "siswa/layout.jinja" %}
+    {% block title %}{% if req %}Edit Permintaan{% else %}Buat Permintaan{% endif %}{% endblock %}
+{% else %}
+    <title>{% if req %}Edit Permintaan{% else %}Buat Permintaan{% endif %}</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_field, render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a hx-get="{{ url_for('siswa.beranda') }}">Beranda</a></li>
+        <li class="breadcrumb-item active">{% if req %}Edit Permintaan{% else %}Buat Permintaan{% endif %}</li>
+    </ol>
+</nav>
+
+<h1 class="h2">{% if req %}Edit Permintaan{% else %}Buat Permintaan{% endif %}</h1>
+
+<div class="row">
+    <div class="col">
+        <div class="card rounded-0 mb-3" style="max-width: 720px;">
+            <div class="card-body">
+                <form method="POST"
+                    {% if req %}
+                    action="{{ url_for('siswa.permintaan_edit', id=req.id) }}"
+                    {% else %}
+                    action="{{ url_for('siswa.permintaan_tambah') }}"
+                    {% endif %}
+                    hx-boost="false">
+                    {{ form.csrf_token }}
+                    {{ render_field(form.category_id) }}
+                    {{ render_field(form.date, type='date', min=min_date, max=max_date) }}
+                    {{ render_field(form.student_note) }}
+                    <button type="submit" class="btn btn-primary">
+                        {% if req %}Simpan Perubahan{% else %}Kirim Permintaan{% endif %}
+                    </button>
+                    <a class="btn btn-secondary ms-2"
+                       hx-get="{{ url_for('siswa.beranda') }}">
+                       Batal
+                    </a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

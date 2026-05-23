@@ -1,0 +1,66 @@
+{% if not is_htmx %}
+    {% extends "admin/layout.jinja" %}
+    {% block title %}{{ 'Edit Kategori' if category else 'Tambah Kategori' }}{% endblock %}
+{% else %}
+    <title>{{ 'Edit Kategori' if category else 'Tambah Kategori' }}</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('admin.kategori') }}"
+            hx-get="{{ url_for('admin.kategori') }}"
+            hx-target="#hx_content"
+            hx-swap="innerHTML">Data Kategori</a></li>
+        <li class="breadcrumb-item active">{{ 'Edit Kategori' if category else 'Tambah Kategori' }}</li>
+    </ol>
+</nav>
+<h1 class="h2">{{ 'Edit Kategori' if category else 'Tambah Kategori' }}</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <form method="POST"
+              action="{{ url_for('admin.kategori_edit', id=category.id) if category else url_for('admin.kategori_tambah') }}"
+              hx-post="{{ url_for('admin.kategori_edit', id=category.id) if category else url_for('admin.kategori_tambah') }}"
+              hx-target="#hx_content"
+              hx-swap="innerHTML">
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                {{ form.name.label(class='form-label') }}
+                {{ form.name(class='form-control' + (' is-invalid' if form.name.errors else ''), required=True, placeholder='Contoh: Persiapan Lomba') }}
+                {% if form.name.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.name.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.teachers.label(class='form-label') }}
+                {{ form.teachers(class='form-select' + (' is-invalid' if form.teachers.errors else ''), size='5', multiple=True) }}
+                {% if form.teachers.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.teachers.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+                <div class="form-text">Tahan Ctrl untuk memilih lebih dari satu guru</div>
+            </div>
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">
+                    {{ 'Simpan Perubahan' if category else 'Tambah Kategori' }}
+                </button>
+                <a class="btn btn-secondary ms-2"
+                   href="{{ url_for('admin.kategori') }}"
+                   hx-get="{{ url_for('admin.kategori') }}"
+                   hx-target="#hx_content"
+                   hx-swap="innerHTML">Batal</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

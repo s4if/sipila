@@ -1,0 +1,25 @@
+{% extends "login/layout.jinja" %}
+
+{% block title %}Login Siswa{% endblock %}
+
+{% from 'macros.jinja' import render_field %}
+
+{% block content %}
+<div class="row">
+	<div class="col d-flex justify-content-center align-items-center">
+		<div class="card rounded-0 mb-3" style="width: 100%; max-width: 720px;">
+            <div class="card-body">
+                <h5 class="card-title">Login Siswa</h5>
+				<form method="POST"
+					action="{{ url_for('auth.login_siswa') }}"
+					hx-boost="false">
+					{{ form.csrf_token }}
+					{{ render_field(form.student_id) }}
+					{{ render_field(form.password) }}
+					<button type="submit" class="btn btn-primary">Submit</button>
+				</form>
+			</div>
+        </div>
+	</div>
+</div>
+{% endblock %}

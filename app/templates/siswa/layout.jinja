@@ -56,14 +56,10 @@
         <div class="col-12 col-md-5 col-lg-8 d-flex align-items-center justify-content-md-end mt-3 mt-md-0">
             <div class="dropdown">
                 <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
-                  ADMIN: {{ username }}
+                  SISWA: {{ student_name }}
                 </button>
                 <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                  <li><a class="dropdown-item" href="{{ url_for('admin.ganti_password') }}"
-                  hx-target="#hx_content"
-                  hx-swap="innerHTML"
-                  >Ganti Password</a></li>
-                  <li><a hx-boost="false" class="dropdown-item" href="{{ url_for('auth.logout') }}">Sign out</a></li>
+                  <li><a hx-boost="false" class="dropdown-item" href="{{ url_for('siswa.logout') }}">Keluar</a></li>
                 </ul>
               </div>
         </div>
@@ -76,30 +72,9 @@
                     hx-swap="innerHTML"
                 >
                     <a class="nav-link" id="nav-beranda"
-                       hx-get="{{ url_for('admin.beranda') }}">
+                       hx-get="{{ url_for('siswa.beranda') }}">
                     Beranda
                     </a>
-                    <a class="nav-link" id="nav-siswa"
-                       hx-get="{{ url_for('admin.siswa') }}">
-                    Siswa
-                    </a>
-
-                    <a class="nav-link" id="nav-rombel"
-                       hx-get="{{ url_for('admin.rombel') }}">
-                    Rombel
-                    </a>
-
-                    <a class="nav-link" id="nav-kategori"
-                       hx-get="{{ url_for('admin.kategori') }}">
-                    Kategori
-                    </a>
-
-                    {% if is_superadmin %}
-                    <a class="nav-link" id="nav-guru"
-                       hx-get="{{ url_for('admin.guru') }}">
-                    Guru
-                    </a>
-                    {% endif %}
                 </nav>
             </div>
             <main class="col-xl-10 col-lg-10 col-md-9 col-12 fix-padding">

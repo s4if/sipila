@@ -57,7 +57,7 @@ sipila/
 │   ├── auth.py             # Auth blueprint (login/logout)
 │   ├── admin.py            # Admin blueprint (dashboard, CRUD routes)
 │   ├── forms.py            # WTForms form classes
-│   ├── helper.py           # Decorators (login_required, admin_required), sanitize_input, htmx init
+│   ├── helper.py           # Decorators (login_required, admin_required), sanitize, htmx init
 │   └── templates/          # Jinja2 templates
 │       ├── macros.jinja    # Shared macros (render_field, render_notif)
 │       ├── login/          # Login page templates
@@ -119,7 +119,7 @@ sipila/
 - `admin_required` decorator in `helper.py` protects admin routes
 - `login_required` decorator exists for future student auth
 - CSRF protection enabled globally via Flask-WTF
-- Input sanitization via `sanitize_input()` in `helper.py`
+- Input sanitization via `sanitize()` in `helper.py`
 
 ### Forms
 - WTForms classes in `app/forms.py`

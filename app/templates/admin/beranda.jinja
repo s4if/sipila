@@ -17,6 +17,65 @@
     </ol>
 </nav>
 <h1 class="h2">Selamat Datang, {{ username }}</h1>
-<p>Dashboard Admin</p>
+
+<div class="row">
+    <div class="col">
+        <table id="permintaanTable" class="table table-striped table-bordered">
+            <thead>
+                <tr>
+                    <th>No</th>
+                    <th>Tanggal</th>
+                    <th>NIS</th>
+                    <th>Nama Siswa</th>
+                    <th>Rombel</th>
+                    <th>Kategori</th>
+                    <th>Status</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+var detail_permintaan = (id) => {
+    var raw_url = "{{ url_for('admin.permintaan_detail', id=0) }}"
+    var url = raw_url.slice(0, -1) + String(id)
+    htmx.ajax("GET", url, {target:'#hx_content', swap:'innerHTML'})
+};
+(function() {
+    if ($.fn.DataTable.isDataTable('#permintaanTable')) {
+        $('#permintaanTable').DataTable().destroy();
+        $('#permintaanTable').empty();
+    }
+    $('#permintaanTable').DataTable({
+        ajax: {
+            url: '{{ url_for("admin.permintaan_data") }}',
+            dataSrc: 'data'
+        },
+        columns: [
+            { data: 'no' },
+            { data: 'date' },
+            { data: 'student_nis' },
+            { data: 'student_name' },
+            { data: 'class_group' },
+            { data: 'category' },
+            { data: 'status', orderable: false },
+            { data: 'actions', orderable: false, searchable: false }
+        ],
+        order: [[1, 'desc']],
+        language: {
+            search: 'Cari:',
+            lengthMenu: 'Tampilkan _MENU_ data',
+            info: 'Menampilkan _START_ - _END_ dari _TOTAL_ data',
+            infoEmpty: 'Belum ada permintaan',
+            emptyTable: 'Belum ada permintaan peminjaman',
+            zeroRecords: 'Tidak ditemukan data yang cocok',
+            paginate: { previous: 'Sebelumnya', next: 'Selanjutnya' }
+        }
+    });
+})();
+</script>
 
 {% endblock %}

@@ -1,0 +1,125 @@
+{% if not is_htmx %}
+    {% extends "siswa/layout.jinja" %}
+    {% block title %}Beranda{% endblock %}
+{% else %}
+    <title>Beranda</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item active">Beranda</li>
+    </ol>
+</nav>
+<h1 class="h2">Selamat Datang, {{ student_name }}</h1>
+
+<div class="row mb-3">
+    <div class="col">
+        <a class="btn btn-primary"
+           hx-get="{{ url_for('siswa.permintaan_tambah') }}">
+        <i class="bi bi-plus-circle"></i> Buat Permintaan
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col">
+        <table id="permintaanTable" class="table table-striped table-bordered">
+            <thead>
+                <tr>
+                    <th>No</th>
+                    <th>Tanggal</th>
+                    <th>Kategori</th>
+                    <th>Status</th>
+                    <th>Catatan Siswa</th>
+                    <th>Catatan Guru</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="modalBatal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Konfirmasi Pembatalan</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                Apakah Anda yakin ingin membatalkan permintaan tanggal <strong id="modalBatalTanggal"></strong>?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <form id="modalBatalForm" hx-post="{{ url_for('siswa.permintaan_batal') }}" style="display:inline"
+                      onsubmit="tutup_modal()">
+                    <input type="hidden" name="id" id="modalBatalId" value=""/>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">Batalkan</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var detail_permintaan = (id) => {
+    var raw_url = "{{ url_for('siswa.permintaan_detail', id=0) }}"
+    var url = raw_url.slice(0, -1) + String(id)
+    htmx.ajax("GET", url, {target:'#hx_content', swap:'innerHTML'})
+};
+var edit_permintaan = (id) => {
+    var raw_url = "{{ url_for('siswa.permintaan_edit', id=0) }}"
+    var url = raw_url.slice(0, -1) + String(id)
+    htmx.ajax("GET", url, {target:'#hx_content', swap:'innerHTML'})
+};
+var batal_permintaan = (id, tanggal) => {
+    document.getElementById('modalBatalId').value = id;
+    document.getElementById('modalBatalTanggal').textContent = tanggal;
+    var modal = new bootstrap.Modal(document.getElementById('modalBatal'));
+    modal.show();
+};
+var tutup_modal = () => {
+    bootstrap.Modal.getInstance(document.getElementById('modalBatal')).hide();
+};
+(function() {
+    if ($.fn.DataTable.isDataTable('#permintaanTable')) {
+        $('#permintaanTable').DataTable().destroy();
+        $('#permintaanTable').empty();
+    }
+    $('#permintaanTable').DataTable({
+        ajax: {
+            url: '{{ url_for("siswa.permintaan_data") }}',
+            dataSrc: 'data'
+        },
+        columns: [
+            { data: 'no' },
+            { data: 'date' },
+            { data: 'category' },
+            { data: 'status', orderable: false },
+            { data: 'student_note' },
+            { data: 'teacher_note' },
+            { data: 'actions', orderable: false, searchable: false }
+        ],
+        order: [[1, 'desc']],
+        language: {
+            search: 'Cari:',
+            lengthMenu: 'Tampilkan _MENU_ data',
+            info: 'Menampilkan _START_ - _END_ dari _TOTAL_ data',
+            infoEmpty: 'Belum ada permintaan',
+            emptyTable: 'Belum ada permintaan peminjaman',
+            zeroRecords: 'Tidak ditemukan data yang cocok',
+            paginate: { previous: 'Sebelumnya', next: 'Selanjutnya' }
+        }
+    });
+})();
+</script>
+
+{% endblock %}

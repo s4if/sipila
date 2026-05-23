@@ -1,0 +1,83 @@
+{% if not is_htmx %}
+    {% extends "admin/layout.jinja" %}
+    {% block title %}{{ 'Edit Guru' if guru else 'Tambah Guru' }}{% endblock %}
+{% else %}
+    <title>{{ 'Edit Guru' if guru else 'Tambah Guru' }}</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{{ url_for('admin.guru') }}"
+            hx-get="{{ url_for('admin.guru') }}"
+            hx-target="#hx_content"
+            hx-swap="innerHTML">Data Guru</a></li>
+        <li class="breadcrumb-item active">{{ 'Edit Guru' if guru else 'Tambah Guru' }}</li>
+    </ol>
+</nav>
+<h1 class="h2">{{ 'Edit Guru' if guru else 'Tambah Guru' }}</h1>
+
+<div class="row">
+    <div class="col">
+        <form method="POST"
+              action="{{ url_for('admin.guru_edit', id=guru.id) if guru else url_for('admin.guru_tambah') }}"
+              hx-post="{{ url_for('admin.guru_edit', id=guru.id) if guru else url_for('admin.guru_tambah') }}"
+              hx-target="#hx_content"
+              hx-swap="innerHTML">
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                {{ form.username.label(class='form-label') }}
+                {{ form.username(class='form-control' + (' is-invalid' if form.username.errors else ''), required=True) }}
+                {% if form.username.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.username.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.name.label(class='form-label') }}
+                {{ form.name(class='form-control' + (' is-invalid' if form.name.errors else ''), required=True) }}
+                {% if form.name.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.name.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.contact_person.label(class='form-label') }}
+                {{ form.contact_person(class='form-control' + (' is-invalid' if form.contact_person.errors else '')) }}
+                {% if form.contact_person.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.contact_person.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.password.label(class='form-label') }}
+                {{ form.password(class='form-control' + (' is-invalid' if form.password.errors else ''), **{'placeholder': 'Kosongkan jika tidak ingin mengubah' if guru else ''}) }}
+                {% if form.password.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.password.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">
+                    {{ 'Simpan Perubahan' if guru else 'Tambah Guru' }}
+                </button>
+                <a class="btn btn-secondary ms-2"
+                   href="{{ url_for('admin.guru') }}"
+                   hx-get="{{ url_for('admin.guru') }}"
+                   hx-target="#hx_content"
+                   hx-swap="innerHTML">Batal</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
