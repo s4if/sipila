@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from app import db
 
 
@@ -61,7 +63,10 @@ class Category(db.Model):
     name = db.Column(db.String(128), nullable=False, unique=True)
 
     teacher_links = db.relationship(
-        "CategoryTeacher", backref="category", lazy="select", cascade="all, delete-orphan"
+        "CategoryTeacher",
+        backref="category",
+        lazy="select",
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self):
@@ -72,10 +77,46 @@ class CategoryTeacher(db.Model):
     __tablename__ = "category_teachers"
     __table_args__ = (db.UniqueConstraint("category_id", "teacher_id"),)
     id = db.Column(db.Integer, primary_key=True)
-    category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=False)
-    teacher_id = db.Column(db.Integer, db.ForeignKey("teachers.id"), nullable=False)
+    category_id = db.Column(
+        db.Integer, db.ForeignKey("categories.id"), nullable=False
+    )
+    teacher_id = db.Column(
+        db.Integer, db.ForeignKey("teachers.id"), nullable=False
+    )
 
     def __repr__(self):
         return "<CategoryTeacher cat={} teacher={}>".format(
             self.category_id, self.teacher_id
+        )
+
+
+class BorrowingRequest(db.Model):
+    __tablename__ = "borrowing_requests"
+    __table_args__ = (db.UniqueConstraint("student_id", "date"),)
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(
+        db.Integer, db.ForeignKey("students.id"), nullable=False
+    )
+    category_id = db.Column(
+        db.Integer, db.ForeignKey("categories.id"), nullable=False
+    )
+    date = db.Column(db.Date, nullable=False)
+    status = db.Column(db.String(16), nullable=False, default="pending")
+    reviewed_by = db.Column(
+        db.Integer, db.ForeignKey("teachers.id"), nullable=True
+    )
+    student_note = db.Column(db.String(256), nullable=True)
+    teacher_note = db.Column(db.String(256), nullable=True)
+    created_at = db.Column(
+        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+
+    student = db.relationship("Student", backref="borrowing_requests")
+    category = db.relationship("Category", backref="borrowing_requests")
+    reviewer = db.relationship("Teacher", backref="reviewed_requests")
+
+    def __repr__(self):
+        return "<BorrowingRequest student={} date={} status={}>".format(
+            self.student_id, self.date, self.status
         )
