@@ -53,3 +53,29 @@ class Student(db.Model):
 
     def __repr__(self):
         return "<Student {}>".format(self.student_id)
+
+
+class Category(db.Model):
+    __tablename__ = "categories"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False, unique=True)
+
+    teacher_links = db.relationship(
+        "CategoryTeacher", backref="category", lazy="select", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self):
+        return "<Category {}>".format(self.name)
+
+
+class CategoryTeacher(db.Model):
+    __tablename__ = "category_teachers"
+    __table_args__ = (db.UniqueConstraint("category_id", "teacher_id"),)
+    id = db.Column(db.Integer, primary_key=True)
+    category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=False)
+    teacher_id = db.Column(db.Integer, db.ForeignKey("teachers.id"), nullable=False)
+
+    def __repr__(self):
+        return "<CategoryTeacher cat={} teacher={}>".format(
+            self.category_id, self.teacher_id
+        )

@@ -2,14 +2,14 @@ from flask import Blueprint, jsonify, request, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import db
-from .forms import GuruForm, RombelForm, SiswaForm
+from .forms import GuruForm, KategoriForm, RombelForm, SiswaForm
 from .helper import (
     admin_required,
     hx_render,
     sanitize,
     superadmin_required,
 )
-from .models import ClassGroup, Student, Teacher
+from .models import Category, CategoryTeacher, ClassGroup, Student, Teacher
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -437,3 +437,141 @@ def guru_hapus():
         db.session.commit()
         notif["success"] = "Guru berhasil dihapus"
     return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+
+# ---- Kategori (Category) CRUD ----
+
+
+def _populate_kategori_teacher_choices(form):
+    form.teachers.choices = [
+        (t.id, t.name or t.username)
+        for t in Teacher.query.order_by(Teacher.username).all()
+    ]
+
+
+@bp.route("/kategori")
+@admin_required
+def kategori():
+    return hx_render("admin/kategori.jinja")
+
+
+@bp.route("/kategori/data")
+@admin_required
+def kategori_data():
+    from sqlalchemy.orm import joinedload
+
+    categories = (
+        Category.query.options(
+            joinedload(Category.teacher_links)
+        )
+        .order_by(Category.id)
+        .all()
+    )
+    teacher_ids = {
+        link.teacher_id
+        for cat in categories
+        for link in cat.teacher_links
+    }
+    teacher_map = {}
+    if teacher_ids:
+        for t in Teacher.query.filter(Teacher.id.in_(teacher_ids)).all():
+            teacher_map[t.id] = t.name or t.username
+
+    is_superadmin = session.get("is_superadmin", False)
+    data = []
+    for i, cat in enumerate(categories, 1):
+        teacher_names = [
+            teacher_map.get(link.teacher_id, "[tidak dikenal]")
+            for link in cat.teacher_links
+        ]
+        data.append(
+            {
+                "no": i,
+                "name": cat.name,
+                "teachers": ", ".join(teacher_names) if teacher_names else "-",
+                "actions": (
+                    '<a class="btn btn-sm btn-warning" '
+                    f'onclick="edit_kategori({cat.id})">'
+                    '<i class="bi bi-pencil"></i> Edit</a> '
+                    '<button type="button" class="btn btn-sm btn-danger" '
+                    f"onclick=\"hapus_kategori({cat.id}, '{sanitize(cat.name)}')\">"
+                    '<i class="bi bi-trash"></i> Hapus</button>'
+                )
+                if is_superadmin
+                else "-",
+            }
+        )
+    return jsonify(data=data)
+
+
+@bp.route("/kategori/tambah", methods=["GET", "POST"])
+@superadmin_required
+def kategori_tambah():
+    form = KategoriForm()
+    _populate_kategori_teacher_choices(form)
+    if request.method == "GET":
+        return hx_render("admin/kategori_form.jinja", category=None, form=form)
+
+    if not form.validate_on_submit():
+        return hx_render("admin/kategori_form.jinja", category=None, form=form)
+
+    notif = {}
+    existing = Category.query.filter_by(name=form.name.data).first()
+    if existing:
+        notif["error"] = "Nama kategori sudah digunakan"
+        return hx_render(
+            "admin/kategori_form.jinja", category=None, form=form, **notif
+        )
+
+    category = Category(name=sanitize(form.name.data))
+    db.session.add(category)
+    db.session.flush()
+    for teacher_id in form.teachers.data:
+        db.session.add(CategoryTeacher(category_id=category.id, teacher_id=teacher_id))
+    db.session.commit()
+    notif["success"] = "Kategori berhasil ditambahkan"
+    return hx_render("admin/kategori.jinja", push_url="admin.kategori", **notif)
+
+
+@bp.route("/kategori/edit/<int:id>", methods=["GET", "POST"])
+@superadmin_required
+def kategori_edit(id):
+    category = Category.query.get_or_404(id)
+    form = KategoriForm(obj=category)
+    _populate_kategori_teacher_choices(form)
+    if request.method == "GET":
+        form.teachers.data = [link.teacher_id for link in category.teacher_links]
+        return hx_render("admin/kategori_form.jinja", category=category, form=form)
+
+    if not form.validate_on_submit():
+        return hx_render("admin/kategori_form.jinja", category=category, form=form)
+
+    notif = {}
+    existing = Category.query.filter(
+        Category.name == form.name.data,
+        Category.id != id,
+    ).first()
+    if existing:
+        notif["error"] = "Nama kategori sudah digunakan"
+        return hx_render(
+            "admin/kategori_form.jinja", category=category, form=form, **notif
+        )
+
+    category.name = sanitize(form.name.data)
+    CategoryTeacher.query.filter_by(category_id=id).delete()
+    for teacher_id in form.teachers.data:
+        db.session.add(CategoryTeacher(category_id=id, teacher_id=teacher_id))
+    db.session.commit()
+    notif["success"] = "Kategori berhasil diperbarui"
+    return hx_render("admin/kategori.jinja", push_url="admin.kategori", **notif)
+
+
+@bp.route("/kategori/hapus", methods=["POST"])
+@superadmin_required
+def kategori_hapus():
+    id = request.form.get("id", type=int)
+    category = Category.query.get_or_404(id)
+    db.session.delete(category)
+    db.session.commit()
+    notif = {"success": "Kategori berhasil dihapus"}
+    return hx_render("admin/kategori.jinja", push_url="admin.kategori", **notif)

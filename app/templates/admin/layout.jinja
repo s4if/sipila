@@ -89,6 +89,11 @@
                     Rombel
                     </a>
 
+                    <a class="nav-link" id="nav-kategori"
+                       hx-get="{{ url_for('admin.kategori') }}">
+                    Kategori
+                    </a>
+
                     {% if is_superadmin %}
                     <a class="nav-link" id="nav-guru"
                        hx-get="{{ url_for('admin.guru') }}">

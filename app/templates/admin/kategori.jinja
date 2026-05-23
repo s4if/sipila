@@ -1,0 +1,116 @@
+{% if not is_htmx %}
+    {% extends "admin/layout.jinja" %}
+    {% block title %}Data Kategori{% endblock %}
+{% else %}
+    <title>Data Kategori</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item active">Data Kategori</li>
+    </ol>
+</nav>
+<h1 class="h2">Data Kategori Peminjaman</h1>
+
+<div class="row mb-3">
+    <div class="col">
+        <a class="btn btn-primary"
+           href="{{ url_for('admin.kategori_tambah') }}"
+           hx-get="{{ url_for('admin.kategori_tambah') }}"
+           hx-target="#hx_content"
+           hx-swap="innerHTML">
+            <i class="bi bi-plus-lg"></i> Tambah Kategori
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col">
+        <table id="kategoriTable" class="table table-striped table-bordered">
+            <thead>
+                <tr>
+                    <th>No</th>
+                    <th>Nama Kategori</th>
+                    <th>Guru Pengawas</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="modalHapus" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Konfirmasi Hapus</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                Apakah Anda yakin ingin menghapus kategori <strong id="modalHapusNama"></strong>?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <form id="modalHapusForm" hx-post="{{ url_for('admin.kategori_hapus') }}" style="display:inline"
+                      onsubmit="tutup_modal()">
+                    <input type="hidden" name="id" id="modalHapusId" value=""/>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-danger">Hapus</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var hapus_kategori = (id, nama) => {
+    document.getElementById('modalHapusId').value = id;
+    document.getElementById('modalHapusNama').textContent = nama;
+    var modal = new bootstrap.Modal(document.getElementById('modalHapus'));
+    modal.show();
+};
+var tutup_modal = () => {
+    bootstrap.Modal.getInstance(document.getElementById('modalHapus')).hide();
+};
+var edit_kategori = (id) => {
+    var raw_url = "{{url_for('admin.kategori_edit', id=0)}}"
+    var url = raw_url.slice(0, -1) + String(id)
+    htmx.ajax("GET", url, {target:'#hx_content', swap:'innerHTML'})
+};
+(function() {
+    if ($.fn.DataTable.isDataTable('#kategoriTable')) {
+        $('#kategoriTable').DataTable().destroy();
+        $('#kategoriTable').empty();
+    }
+    $('#kategoriTable').DataTable({
+        ajax: {
+            url: '{{ url_for("admin.kategori_data") }}',
+            dataSrc: 'data'
+        },
+        columns: [
+            { data: 'no' },
+            { data: 'name' },
+            { data: 'teachers' },
+            { data: 'actions', orderable: false, searchable: false }
+        ],
+        language: {
+            search: 'Cari:',
+            lengthMenu: 'Tampilkan _MENU_ data',
+            info: 'Menampilkan _START_ - _END_ dari _TOTAL_ data',
+            infoEmpty: 'Belum ada data kategori',
+            emptyTable: 'Belum ada data kategori',
+            zeroRecords: 'Tidak ditemukan data yang cocok',
+            paginate: { previous: 'Sebelumnya', next: 'Selanjutnya' }
+        }
+    });
+})();
+</script>
+
+{% endblock %}

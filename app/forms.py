@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import PasswordField, SelectField, StringField
+from wtforms import PasswordField, SelectField, SelectMultipleField, StringField
 from wtforms.validators import DataRequired, Optional
 
 
@@ -47,5 +47,14 @@ class RombelForm(FlaskForm):
     homeroom_teacher_id = SelectField(
         "Wali Kelas",
         coerce=lambda x: int(x) if x else None,
+        validators=[Optional()],
+    )
+
+
+class KategoriForm(FlaskForm):
+    name = StringField("Nama Kategori", validators=[DataRequired()])
+    teachers = SelectMultipleField(
+        "Guru Pengawas",
+        coerce=int,
         validators=[Optional()],
     )
