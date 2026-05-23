@@ -39,9 +39,9 @@ def monitor_data():
         try:
             tanggal = datetime.strptime(tanggal_str, "%Y-%m-%d").date()
         except ValueError:
-            tanggal = date.today()
+            tanggal = datetime.now(WIB).date()
     else:
-        tanggal = date.today()
+        tanggal = datetime.now(WIB).date()
 
     requests = (
         BorrowingRequest.query.filter_by(status="accepted", date=tanggal)
