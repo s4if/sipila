@@ -819,3 +819,4 @@ def permintaan_batalkan(id):
         success="Keputusan berhasil dibatalkan",
         push_url=url_for("admin.permintaan_detail", id=id),
     )
+

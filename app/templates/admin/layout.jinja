@@ -109,6 +109,11 @@
                     Guru
                     </a>
                     {% endif %}
+
+                    <a class="nav-link" id="nav-monitor"
+                       hx-get="{{ url_for('supervisor.monitor') }}">
+                    Monitor
+                    </a>
                 </nav>
             </div>
             <main class="col-xl-10 col-lg-10 col-md-9 col-12 fix-padding">
