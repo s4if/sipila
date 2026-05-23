@@ -3,10 +3,14 @@
 import functools
 import re
 
+from datetime import timedelta, timezone
+
 from flask import make_response, redirect, render_template, session, url_for
 from flask_htmx import HTMX
 
 htmx = HTMX()
+
+WIB = timezone(timedelta(hours=7))
 
 
 def login_required(view):

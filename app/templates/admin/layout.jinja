@@ -33,8 +33,17 @@
                 z-index: 999;
             }
         }
-        body.dimmed {
-          filter: blur(3px);
+        .hx-spinner-overlay {
+          position: absolute;
+          inset: 0;
+          display: none;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255, 255, 255, 0.7);
+          z-index: 100;
+        }
+        .hx-spinner-overlay.show {
+          display: flex;
         }
     </style>
     <script type="text/javascript" src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
@@ -100,26 +109,37 @@
                     Guru
                     </a>
                     {% endif %}
+
+                    <a class="nav-link" id="nav-monitor"
+                       hx-get="{{ url_for('supervisor.monitor') }}">
+                    Monitor
+                    </a>
                 </nav>
             </div>
             <main class="col-xl-10 col-lg-10 col-md-9 col-12 fix-padding">
-              <div class="row" hx-target="#hx_content" hx-swap="innerHTML">
+              <div class="row position-relative" hx-target="#hx_content" hx-swap="innerHTML">
                 <div class="col" id="hx_content">
                 {% block content %} {% endblock %}
+                </div>
+                <div class="hx-spinner-overlay" id="hx-spinner">
+                  <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                  </div>
                 </div>
               </div>
             </main>
         </div>
     </div>
     <script type="text/javascript">
+    const hxSpinner = document.getElementById('hx-spinner');
     document.addEventListener('htmx:beforeRequest', function(event) {
-      document.body.classList.add('dimmed');
+      hxSpinner.classList.add('show');
     });
     document.addEventListener('htmx:afterRequest', function(event) {
-      document.body.classList.remove('dimmed');
+      hxSpinner.classList.remove('show');
     });
     document.addEventListener('htmx:afterSwap', function(event) {
-      document.body.classList.remove('dimmed');
+      hxSpinner.classList.remove('show');
     });
     const sbToggler = document.getElementById('sb-toggler');
     const sidebar = document.getElementById('sidebar');

@@ -6,6 +6,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .db import db
 from .forms import GuruForm, KategoriForm, RombelForm, SiswaForm
 from .helper import (
+    WIB,
     admin_required,
     hx_render,
     sanitize,
@@ -156,7 +157,7 @@ def rombel_edit(id):
         )
 
     notif = {}
-    class_group.name = form.name.data
+    class_group.name = sanitize(form.name.data)
     class_group.grade_level = form.grade_level.data
     class_group.major = form.major.data or None
     class_group.homeroom_teacher_id = form.homeroom_teacher_id.data or None
@@ -305,14 +306,14 @@ def siswa_edit(id):
             **notif,
         )
 
-    student.student_id = form.student_id.data
-    student.name = form.name.data
+    student.student_id = sanitize(form.student_id.data)
+    student.name = sanitize(form.name.data)
     if form.password.data:
         student.password = generate_password_hash(
             form.password.data, method="pbkdf2:sha256", salt_length=16
         )
     student.class_group_id = form.class_group_id.data
-    student.admin_note = form.admin_note.data
+    student.admin_note = sanitize(form.admin_note.data)
     db.session.commit()
     notif["success"] = "Siswa berhasil diperbarui"
     return hx_render("admin/siswa.jinja", push_url="admin.siswa", **notif)
@@ -652,8 +653,6 @@ def permintaan_data():
         student_nis = student.student_id if student else "-"
         category_name = req.category.name if req.category else "-"
 
-        can_review = _teacher_can_review(teacher.id, req.category_id)
-
         detail_btn = (
             '<a class="btn btn-sm btn-info text-white" '
             f'onclick="detail_permintaan({req.id})">'
@@ -686,8 +685,6 @@ def permintaan_detail(id):
         joinedload(BorrowingRequest.category),
         joinedload(BorrowingRequest.reviewer),
     ).get_or_404(id)
-
-    is_superadmin = session.get("is_superadmin", False)
     can_review = _teacher_can_review(teacher.id, req.category_id)
 
     return hx_render(
@@ -790,6 +787,16 @@ def permintaan_batalkan(id):
             push_url=url_for("admin.permintaan_detail", id=id),
         )
 
+    now = datetime.now(WIB)
+    if req.date < now.date() or (req.date == now.date() and now.hour >= 17):
+        return hx_render(
+            "admin/permintaan_detail.jinja",
+            req=req,
+            can_review=True,
+            error="Pembatalan tidak dapat dilakukan setelah pukul 17:00 pada hari peminjaman atau untuk tanggal yang sudah lewat",
+            push_url=url_for("admin.permintaan_detail", id=id),
+        )
+
     if req.status not in ("accepted", "rejected"):
         return hx_render(
             "admin/permintaan_detail.jinja",
@@ -812,3 +819,4 @@ def permintaan_batalkan(id):
         success="Keputusan berhasil dibatalkan",
         push_url=url_for("admin.permintaan_detail", id=id),
     )
+
