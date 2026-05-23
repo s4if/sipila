@@ -1,4 +1,4 @@
-from app.helper import sanitize, superadmin_required
+from app.helper import sanitize
 
 
 class TestSanitizeInput:

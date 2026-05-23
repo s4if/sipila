@@ -6,6 +6,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .db import db
 from .forms import GuruForm, KategoriForm, RombelForm, SiswaForm
 from .helper import (
+    WIB,
     admin_required,
     hx_render,
     sanitize,
@@ -783,6 +784,16 @@ def permintaan_batalkan(id):
             req=req,
             can_review=False,
             error="Anda tidak berwenang meninjau permintaan ini",
+            push_url=url_for("admin.permintaan_detail", id=id),
+        )
+
+    now = datetime.now(WIB)
+    if req.date < now.date() or (req.date == now.date() and now.hour >= 17):
+        return hx_render(
+            "admin/permintaan_detail.jinja",
+            req=req,
+            can_review=True,
+            error="Pembatalan tidak dapat dilakukan setelah pukul 17:00 pada hari peminjaman atau untuk tanggal yang sudah lewat",
             push_url=url_for("admin.permintaan_detail", id=id),
         )
 

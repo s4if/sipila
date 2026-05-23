@@ -1,17 +1,17 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, redirect, request, session, url_for
 
 from .db import db
 from .forms import PermintaanSiswaForm
-from .helper import hx_render, login_required, sanitize
-from .models import BorrowingRequest, Category, Student
+from .helper import WIB, hx_render, login_required, sanitize
+from .models import BorrowingRequest, Category
 
 bp = Blueprint("siswa", __name__, url_prefix="/siswa")
 
 
 def _date_range():
-    min_date = date.today()
+    min_date = datetime.now(WIB).date()
     max_date = min_date + timedelta(days=7)
     return min_date, max_date
 
