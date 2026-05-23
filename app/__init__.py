@@ -109,10 +109,11 @@ def create_app(test_config=None):
             db.session.commit()
             print(f"Admin user '{username}' deleted!")
 
-    from . import admin, auth
+    from . import admin, auth, siswa
 
     app.register_blueprint(auth.bp)
     app.register_blueprint(admin.bp)
+    app.register_blueprint(siswa.bp)
     app.cli.add_command(add_admin_user)
     app.cli.add_command(delete_admin_user)
     app.cli.add_command(change_admin_user)

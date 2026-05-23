@@ -1,0 +1,273 @@
+{% if not is_htmx %}
+    {% extends "admin/layout.jinja" %}
+    {% block title %}Detail Permintaan{% endblock %}
+{% else %}
+    <title>Detail Permintaan</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item">
+            <a href="{{ url_for('admin.beranda') }}"
+               hx-get="{{ url_for('admin.beranda') }}"
+               hx-target="#hx_content"
+               hx-swap="innerHTML">Beranda</a>
+        </li>
+        <li class="breadcrumb-item active">Detail Permintaan</li>
+    </ol>
+</nav>
+
+<h1 class="h2">Detail Permintaan Peminjaman</h1>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Informasi Siswa</div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th class="ps-0" style="width:40%">NIS</th>
+                        <td>{{ req.student.student_id if req.student else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="ps-0">Nama</th>
+                        <td>{{ req.student.name if req.student else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="ps-0">Rombel</th>
+                        <td>{{ req.student.class_group.display_name if req.student and req.student.class_group else '-' }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Informasi Permintaan</div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th class="ps-0" style="width:40%">Tanggal</th>
+                        <td>{{ req.date.strftime('%d/%m/%Y') if req.date else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="ps-0">Kategori</th>
+                        <td>{{ req.category.name if req.category else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="ps-0">Waktu Pengajuan</th>
+                        <td>{{ req.created_at.strftime('%d/%m/%Y %H:%M') if req.created_at else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="ps-0">Status</th>
+                        <td>
+                            {% if req.status == 'pending' %}
+                                <span class="badge bg-warning text-dark">Pending</span>
+                            {% elif req.status == 'accepted' %}
+                                <span class="badge bg-success">Diterima</span>
+                            {% elif req.status == 'rejected' %}
+                                <span class="badge bg-danger">Ditolak</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if req.student_note %}
+<div class="row mb-3">
+    <div class="col">
+        <div class="card">
+            <div class="card-header">Catatan Siswa</div>
+            <div class="card-body">
+                {{ req.student_note }}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if req.reviewed_by %}
+<div class="row mb-3">
+    <div class="col">
+        <div class="card">
+            <div class="card-header">Hasil Peninjauan</div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th class="ps-0" style="width:40%">Ditinjau oleh</th>
+                        <td>{{ req.reviewer.name if req.reviewer else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th class="ps-0">Waktu Peninjauan</th>
+                        <td>{{ req.reviewed_at.strftime('%d/%m/%Y %H:%M') if req.reviewed_at else '-' }}</td>
+                    </tr>
+                    {% if req.teacher_note %}
+                    <tr>
+                        <th class="ps-0">Catatan Guru</th>
+                        <td>{{ req.teacher_note }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if can_review and req.status == 'pending' %}
+<div class="row mb-3">
+    <div class="col">
+        <div class="card">
+            <div class="card-header">Tinjau Permintaan</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="teacher_note" class="form-label">Catatan (opsional)</label>
+                    <input type="text" id="teacher_note" name="teacher_note" class="form-control"
+                           placeholder="Catatan untuk siswa">
+                </div>
+                <button type="button" class="btn btn-success" onclick="tampilkan_modal_terima()">
+                    <i class="bi bi-check-lg"></i> Terima
+                </button>
+                <button type="button" class="btn btn-danger" onclick="tampilkan_modal_tolak()">
+                    <i class="bi bi-x-lg"></i> Tolak
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalTerima" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Konfirmasi Terima</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                Apakah Anda yakin ingin <strong>menerima</strong> permintaan peminjaman ini?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <form id="form-terima"
+                      hx-post="{{ url_for('admin.permintaan_terima', id=req.id) }}"
+                      hx-target="#hx_content"
+                      hx-swap="innerHTML"
+                      onsubmit="tutup_modal('modalTerima')"
+                      style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="teacher_note" value="" id="form-terima-note"/>
+                    <button type="submit" class="btn btn-success">Terima</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalTolak" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Konfirmasi Tolak</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                Apakah Anda yakin ingin <strong>menolak</strong> permintaan peminjaman ini?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <form id="form-tolak"
+                      hx-post="{{ url_for('admin.permintaan_tolak', id=req.id) }}"
+                      hx-target="#hx_content"
+                      hx-swap="innerHTML"
+                      onsubmit="tutup_modal('modalTolak')"
+                      style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="teacher_note" value="" id="form-tolak-note"/>
+                    <button type="submit" class="btn btn-danger">Tolak</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var tutup_modal = function(modalId) {
+    bootstrap.Modal.getInstance(document.getElementById(modalId)).hide();
+};
+var tampilkan_modal_terima = function() {
+    var note = document.getElementById('teacher_note').value;
+    document.getElementById('form-terima-note').value = note;
+    new bootstrap.Modal(document.getElementById('modalTerima')).show();
+};
+var tampilkan_modal_tolak = function() {
+    var note = document.getElementById('teacher_note').value;
+    document.getElementById('form-tolak-note').value = note;
+    new bootstrap.Modal(document.getElementById('modalTolak')).show();
+};
+</script>
+{% endif %}
+
+{% if can_review and req.status in ('accepted', 'rejected') %}
+<div class="row mb-3">
+    <div class="col">
+        <button type="button" class="btn btn-outline-warning" onclick="tampilkan_modal_batalkan()">
+            <i class="bi bi-arrow-counterclockwise"></i> Batalkan Keputusan
+        </button>
+    </div>
+</div>
+
+<div class="modal fade" id="modalBatalkan" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Konfirmasi Batalkan Keputusan</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body">
+                Apakah Anda yakin ingin <strong>membatalkan keputusan</strong> pada permintaan ini?
+                Status akan dikembalikan menjadi <strong>Pending</strong>.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <form hx-post="{{ url_for('admin.permintaan_batalkan', id=req.id) }}"
+                      hx-target="#hx_content"
+                      hx-swap="innerHTML"
+                      onsubmit="tutup_modal('modalBatalkan')"
+                      style="display:inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-warning">Batalkan Keputusan</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var tampilkan_modal_batalkan = function() {
+    new bootstrap.Modal(document.getElementById('modalBatalkan')).show();
+};
+</script>
+{% endif %}
+
+<div class="row mb-3">
+    <div class="col">
+        <a class="btn btn-secondary"
+           href="{{ url_for('admin.beranda') }}"
+           hx-get="{{ url_for('admin.beranda') }}"
+           hx-target="#hx_content"
+           hx-swap="innerHTML">
+            <i class="bi bi-arrow-left"></i> Kembali
+        </a>
+    </div>
+</div>
+
+{% endblock %}

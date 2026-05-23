@@ -1,11 +1,22 @@
 from flask_wtf import FlaskForm
-from wtforms import PasswordField, SelectField, SelectMultipleField, StringField
+from wtforms import DateField, PasswordField, SelectField, SelectMultipleField, StringField, TextAreaField
 from wtforms.validators import DataRequired, Optional
 
 
 class LoginForm(FlaskForm):
     username = StringField("Username", validators=[DataRequired()])
     password = PasswordField("Password", validators=[DataRequired()])
+
+
+class SiswaLoginForm(FlaskForm):
+    student_id = StringField("NIS", validators=[DataRequired()])
+    password = PasswordField("Password", validators=[DataRequired()])
+
+
+class PermintaanSiswaForm(FlaskForm):
+    category_id = SelectField("Kategori", coerce=int, validators=[DataRequired()])
+    date = DateField("Tanggal Pinjam", validators=[DataRequired()], format="%Y-%m-%d")
+    student_note = TextAreaField("Catatan", validators=[Optional()])
 
 
 class GuruForm(FlaskForm):

@@ -33,6 +33,31 @@ def login_admin():
             return render_template("login/index.jinja", form=form, error=error)
 
 
+@bp.route("/login/siswa", methods=["GET", "POST"])
+def login_siswa():
+    from .forms import SiswaLoginForm
+
+    form = SiswaLoginForm(request.form)
+    if request.method == "GET":
+        return render_template("login/siswa.jinja", form=form)
+    else:
+        from .models import Student
+
+        siswa = Student.query.filter_by(
+            student_id=request.form["student_id"], is_deleted=False
+        ).first()
+        if siswa and check_password_hash(siswa.password, request.form["password"]):
+            session["logged_in"] = True
+            session["is_admin"] = False
+            session["student_id"] = siswa.student_id
+            session["student_name"] = siswa.name
+            session["student_db_id"] = siswa.id
+            return redirect(url_for("siswa.beranda"))
+        else:
+            error = "NIS atau password salah"
+            return render_template("login/siswa.jinja", form=form, error=error)
+
+
 @bp.route("/logout")
 def logout():
     session.clear()

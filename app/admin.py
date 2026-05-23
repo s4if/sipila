@@ -1,4 +1,6 @@
-from flask import Blueprint, jsonify, request, session
+from datetime import datetime, timezone
+
+from flask import Blueprint, jsonify, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import db
@@ -9,7 +11,14 @@ from .helper import (
     sanitize,
     superadmin_required,
 )
-from .models import Category, CategoryTeacher, ClassGroup, Student, Teacher
+from .models import (
+    BorrowingRequest,
+    Category,
+    CategoryTeacher,
+    ClassGroup,
+    Student,
+    Teacher,
+)
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -461,16 +470,12 @@ def kategori_data():
     from sqlalchemy.orm import joinedload
 
     categories = (
-        Category.query.options(
-            joinedload(Category.teacher_links)
-        )
+        Category.query.options(joinedload(Category.teacher_links))
         .order_by(Category.id)
         .all()
     )
     teacher_ids = {
-        link.teacher_id
-        for cat in categories
-        for link in cat.teacher_links
+        link.teacher_id for cat in categories for link in cat.teacher_links
     }
     teacher_map = {}
     if teacher_ids:
@@ -527,7 +532,9 @@ def kategori_tambah():
     db.session.add(category)
     db.session.flush()
     for teacher_id in form.teachers.data:
-        db.session.add(CategoryTeacher(category_id=category.id, teacher_id=teacher_id))
+        db.session.add(
+            CategoryTeacher(category_id=category.id, teacher_id=teacher_id)
+        )
     db.session.commit()
     notif["success"] = "Kategori berhasil ditambahkan"
     return hx_render("admin/kategori.jinja", push_url="admin.kategori", **notif)
@@ -540,11 +547,17 @@ def kategori_edit(id):
     form = KategoriForm(obj=category)
     _populate_kategori_teacher_choices(form)
     if request.method == "GET":
-        form.teachers.data = [link.teacher_id for link in category.teacher_links]
-        return hx_render("admin/kategori_form.jinja", category=category, form=form)
+        form.teachers.data = [
+            link.teacher_id for link in category.teacher_links
+        ]
+        return hx_render(
+            "admin/kategori_form.jinja", category=category, form=form
+        )
 
     if not form.validate_on_submit():
-        return hx_render("admin/kategori_form.jinja", category=category, form=form)
+        return hx_render(
+            "admin/kategori_form.jinja", category=category, form=form
+        )
 
     notif = {}
     existing = Category.query.filter(
@@ -575,3 +588,227 @@ def kategori_hapus():
     db.session.commit()
     notif = {"success": "Kategori berhasil dihapus"}
     return hx_render("admin/kategori.jinja", push_url="admin.kategori", **notif)
+
+
+# ---- Permintaan Peminjaman ----
+
+
+def _get_current_teacher():
+    return Teacher.query.filter_by(username=session["admin_name"]).first()
+
+
+def _get_teacher_category_ids(teacher_id):
+    return [
+        ct.category_id
+        for ct in CategoryTeacher.query.filter_by(teacher_id=teacher_id).all()
+    ]
+
+
+def _teacher_can_review(teacher_id, category_id):
+    return (
+        CategoryTeacher.query.filter_by(
+            teacher_id=teacher_id, category_id=category_id
+        ).first()
+        is not None
+    )
+
+
+@bp.route("/permintaan/data")
+@admin_required
+def permintaan_data():
+    from sqlalchemy.orm import joinedload
+
+    teacher = _get_current_teacher()
+    is_superadmin = session.get("is_superadmin", False)
+    teacher_category_ids = _get_teacher_category_ids(teacher.id)
+
+    query = BorrowingRequest.query.options(
+        joinedload(BorrowingRequest.student).joinedload(Student.class_group),
+        joinedload(BorrowingRequest.category),
+    )
+
+    if not is_superadmin:
+        query = query.filter(
+            BorrowingRequest.category_id.in_(teacher_category_ids)
+        )
+
+    requests = query.order_by(BorrowingRequest.date.desc()).all()
+
+    status_badges = {
+        "pending": '<span class="badge bg-warning text-dark">Pending</span>',
+        "accepted": '<span class="badge bg-success">Diterima</span>',
+        "rejected": '<span class="badge bg-danger">Ditolak</span>',
+    }
+
+    data = []
+    for i, req in enumerate(requests, 1):
+        student = req.student
+        cat_group = (
+            student.class_group.display_name
+            if student and student.class_group
+            else "-"
+        )
+        student_name = student.name if student else "-"
+        student_nis = student.student_id if student else "-"
+        category_name = req.category.name if req.category else "-"
+
+        can_review = _teacher_can_review(teacher.id, req.category_id)
+
+        detail_btn = (
+            '<a class="btn btn-sm btn-info text-white" '
+            f'onclick="detail_permintaan({req.id})">'
+            '<i class="bi bi-eye"></i> Detail</a>'
+        )
+
+        data.append(
+            {
+                "no": i,
+                "date": req.date.strftime("%d/%m/%Y") if req.date else "-",
+                "student_nis": student_nis,
+                "student_name": student_name,
+                "class_group": cat_group,
+                "category": category_name,
+                "status": status_badges.get(req.status, req.status),
+                "actions": detail_btn,
+            }
+        )
+    return jsonify(data=data)
+
+
+@bp.route("/permintaan/<int:id>")
+@admin_required
+def permintaan_detail(id):
+    from sqlalchemy.orm import joinedload
+
+    teacher = _get_current_teacher()
+    req = BorrowingRequest.query.options(
+        joinedload(BorrowingRequest.student).joinedload(Student.class_group),
+        joinedload(BorrowingRequest.category),
+        joinedload(BorrowingRequest.reviewer),
+    ).get_or_404(id)
+
+    is_superadmin = session.get("is_superadmin", False)
+    can_review = _teacher_can_review(teacher.id, req.category_id)
+
+    return hx_render(
+        "admin/permintaan_detail.jinja",
+        req=req,
+        can_review=can_review,
+    )
+
+
+@bp.route("/permintaan/terima/<int:id>", methods=["POST"])
+@admin_required
+def permintaan_terima(id):
+    teacher = _get_current_teacher()
+    req = BorrowingRequest.query.get_or_404(id)
+
+    if not _teacher_can_review(teacher.id, req.category_id):
+        return hx_render(
+            "admin/permintaan_detail.jinja",
+            req=req,
+            can_review=False,
+            error="Anda tidak berwenang meninjau permintaan ini",
+            push_url=url_for("admin.permintaan_detail", id=id),
+        )
+
+    if req.status != "pending":
+        return hx_render(
+            "admin/permintaan_detail.jinja",
+            req=req,
+            can_review=True,
+            error="Permintaan sudah ditinjau",
+            push_url=url_for("admin.permintaan_detail", id=id),
+        )
+
+    req.status = "accepted"
+    req.reviewed_by = teacher.id
+    req.teacher_note = sanitize(request.form.get("teacher_note")) or None
+    req.reviewed_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    return hx_render(
+        "admin/permintaan_detail.jinja",
+        req=req,
+        can_review=True,
+        success="Permintaan berhasil diterima",
+        push_url=url_for("admin.permintaan_detail", id=id),
+    )
+
+
+@bp.route("/permintaan/tolak/<int:id>", methods=["POST"])
+@admin_required
+def permintaan_tolak(id):
+    teacher = _get_current_teacher()
+    req = BorrowingRequest.query.get_or_404(id)
+
+    if not _teacher_can_review(teacher.id, req.category_id):
+        return hx_render(
+            "admin/permintaan_detail.jinja",
+            req=req,
+            can_review=False,
+            error="Anda tidak berwenang meninjau permintaan ini",
+            push_url=url_for("admin.permintaan_detail", id=id),
+        )
+
+    if req.status != "pending":
+        return hx_render(
+            "admin/permintaan_detail.jinja",
+            req=req,
+            can_review=True,
+            error="Permintaan sudah ditinjau",
+            push_url=url_for("admin.permintaan_detail", id=id),
+        )
+
+    req.status = "rejected"
+    req.reviewed_by = teacher.id
+    req.teacher_note = sanitize(request.form.get("teacher_note")) or None
+    req.reviewed_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    return hx_render(
+        "admin/permintaan_detail.jinja",
+        req=req,
+        can_review=True,
+        success="Permintaan berhasil ditolak",
+        push_url=url_for("admin.permintaan_detail", id=id),
+    )
+
+
+@bp.route("/permintaan/batalkan/<int:id>", methods=["POST"])
+@admin_required
+def permintaan_batalkan(id):
+    teacher = _get_current_teacher()
+    req = BorrowingRequest.query.get_or_404(id)
+
+    if not _teacher_can_review(teacher.id, req.category_id):
+        return hx_render(
+            "admin/permintaan_detail.jinja",
+            req=req,
+            can_review=False,
+            error="Anda tidak berwenang meninjau permintaan ini",
+            push_url=url_for("admin.permintaan_detail", id=id),
+        )
+
+    if req.status not in ("accepted", "rejected"):
+        return hx_render(
+            "admin/permintaan_detail.jinja",
+            req=req,
+            can_review=True,
+            error="Permintaan belum ditinjau",
+            push_url=url_for("admin.permintaan_detail", id=id),
+        )
+
+    req.status = "pending"
+    req.reviewed_by = None
+    req.teacher_note = None
+    req.reviewed_at = None
+    db.session.commit()
+
+    return hx_render(
+        "admin/permintaan_detail.jinja",
+        req=req,
+        can_review=True,
+        success="Keputusan berhasil dibatalkan",
+        push_url=url_for("admin.permintaan_detail", id=id),
+    )

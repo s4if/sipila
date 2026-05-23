@@ -13,12 +13,14 @@ def login_required(view):
     @functools.wraps(view)
     def wrapped_view(**kwargs):
         if "logged_in" not in session or "is_admin" not in session:
-            return redirect(url_for("auth.login"))
+            return redirect(url_for("auth.login_siswa"))
         elif not session["logged_in"]:
             session.clear()
-            return redirect(url_for("auth.login"))
-        elif "user_id" not in session or "username" not in session:
+            return redirect(url_for("auth.login_siswa"))
+        elif session.get("is_admin"):
             return redirect(url_for("admin.beranda"))
+        elif "student_id" not in session or "student_db_id" not in session:
+            return redirect(url_for("auth.login_siswa"))
         return view(**kwargs)
 
     return wrapped_view
@@ -65,10 +67,14 @@ def hx_render(template, push_url=None, **kwargs):
         "username", session.get("username") or session.get("admin_name")
     )
     kwargs.setdefault("is_superadmin", session.get("is_superadmin"))
+    kwargs.setdefault("student_name", session.get("student_name"))
     kwargs.setdefault("is_htmx", htmx)
     if push_url:
         resp = make_response(render_template(template, **kwargs))
-        resp.headers["HX-Push-Url"] = url_for(push_url)
+        if push_url.startswith("/") or push_url.startswith("http"):
+            resp.headers["HX-Push-Url"] = push_url
+        else:
+            resp.headers["HX-Push-Url"] = url_for(push_url)
         return resp
     return render_template(template, **kwargs)
 
