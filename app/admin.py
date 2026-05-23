@@ -156,7 +156,7 @@ def rombel_edit(id):
         )
 
     notif = {}
-    class_group.name = form.name.data
+    class_group.name = sanitize(form.name.data)
     class_group.grade_level = form.grade_level.data
     class_group.major = form.major.data or None
     class_group.homeroom_teacher_id = form.homeroom_teacher_id.data or None
@@ -305,14 +305,14 @@ def siswa_edit(id):
             **notif,
         )
 
-    student.student_id = form.student_id.data
-    student.name = form.name.data
+    student.student_id = sanitize(form.student_id.data)
+    student.name = sanitize(form.name.data)
     if form.password.data:
         student.password = generate_password_hash(
             form.password.data, method="pbkdf2:sha256", salt_length=16
         )
     student.class_group_id = form.class_group_id.data
-    student.admin_note = form.admin_note.data
+    student.admin_note = sanitize(form.admin_note.data)
     db.session.commit()
     notif["success"] = "Siswa berhasil diperbarui"
     return hx_render("admin/siswa.jinja", push_url="admin.siswa", **notif)
@@ -652,8 +652,6 @@ def permintaan_data():
         student_nis = student.student_id if student else "-"
         category_name = req.category.name if req.category else "-"
 
-        can_review = _teacher_can_review(teacher.id, req.category_id)
-
         detail_btn = (
             '<a class="btn btn-sm btn-info text-white" '
             f'onclick="detail_permintaan({req.id})">'
@@ -686,8 +684,6 @@ def permintaan_detail(id):
         joinedload(BorrowingRequest.category),
         joinedload(BorrowingRequest.reviewer),
     ).get_or_404(id)
-
-    is_superadmin = session.get("is_superadmin", False)
     can_review = _teacher_can_review(teacher.id, req.category_id)
 
     return hx_render(
