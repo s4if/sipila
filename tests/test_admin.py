@@ -208,3 +208,298 @@ def test_guru_hapus_self_blocked(logged_in_client, admin_user):
 def test_guru_hapus_404(logged_in_client):
     response = logged_in_client.post('/admin/guru/hapus', data={'id': 9999})
     assert response.status_code == 404
+
+
+# ---- Siswa Import tests ----
+
+
+def _create_class_group(name="1", grade_level="X", major="TJKT"):
+    from app import db
+    from app.models import ClassGroup
+    cg = ClassGroup(name=name, grade_level=grade_level, major=major)
+    db.session.add(cg)
+    db.session.commit()
+    return cg.id
+
+
+def _build_xlsx(mode="skip", jumlah_siswa=0, rombel_info=None, rows=None):
+    from io import BytesIO
+    import openpyxl
+
+    if rombel_info is None:
+        rombel_info = []
+    if rows is None:
+        rows = []
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+
+    ws["B1"] = mode
+    ws["B2"] = jumlah_siswa
+    ws["H1"] = "Nama Rombel"
+    ws["I1"] = "id"
+
+    for i, (rname, rid) in enumerate(rombel_info, start=2):
+        ws.cell(row=i, column=8, value=rname)
+        ws.cell(row=i, column=9, value=rid)
+
+    header_row = 4
+    ws.cell(row=header_row, column=1, value="NIS")
+    ws.cell(row=header_row, column=2, value="Nama")
+    ws.cell(row=header_row, column=3, value="Password")
+    ws.cell(row=header_row, column=4, value="Rombel")
+    ws.cell(row=header_row, column=5, value="Catatan Admin")
+
+    for i, row_data in enumerate(rows):
+        r = header_row + 1 + i
+        for col_idx, val in enumerate(row_data, start=1):
+            ws.cell(row=r, column=col_idx, value=val)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def test_siswa_template_download(logged_in_client):
+    response = logged_in_client.get('/admin/siswa/template')
+    assert response.status_code == 200
+    assert response.content_type == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert b"PK" in response.data
+
+
+def test_siswa_import_no_file(logged_in_client):
+    response = logged_in_client.post('/admin/siswa/import')
+    assert response.status_code == 200
+    assert b'Tidak ada file' in response.data
+
+
+def test_siswa_import_wrong_extension(logged_in_client):
+    from io import BytesIO
+    buf = BytesIO(b"not an xlsx")
+    response = logged_in_client.post(
+        '/admin/siswa/import',
+        data={'file': (buf, 'data.csv')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200
+    assert b'harus berformat' in response.data
+
+
+def test_siswa_import_skip_mode(logged_in_client, app):
+    from app import db
+    from app.models import Student
+    from werkzeug.security import generate_password_hash
+
+    with app.app_context():
+        cg_id = _create_class_group()
+        existing = Student(
+            student_id="1001",
+            name="Lama",
+            password=generate_password_hash("old"),
+            class_group_id=cg_id,
+        )
+        db.session.add(existing)
+        db.session.commit()
+
+        buf = _build_xlsx(
+            mode="skip",
+            jumlah_siswa=2,
+            rombel_info=[("X TJKT 1", cg_id)],
+            rows=[
+                ("1001", "Baru", "pass123", cg_id, ""),
+                ("1002", "Ahmad", "", cg_id, ""),
+            ],
+        )
+
+    response = logged_in_client.post(
+        '/admin/siswa/import',
+        data={'file': (buf, 'import.xlsx')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200
+    assert b'ditambahkan' in response.data
+    assert b'dilewati' in response.data
+
+    with app.app_context():
+        assert Student.query.filter_by(student_id="1001").first().name == "Lama"
+        assert Student.query.filter_by(student_id="1002").first() is not None
+
+
+def test_siswa_import_update_mode(logged_in_client, app):
+    from app import db
+    from app.models import Student
+    from werkzeug.security import generate_password_hash
+
+    with app.app_context():
+        cg_id = _create_class_group()
+        existing = Student(
+            student_id="1001",
+            name="Lama",
+            password=generate_password_hash("old"),
+            class_group_id=cg_id,
+        )
+        db.session.add(existing)
+        db.session.commit()
+
+        buf = _build_xlsx(
+            mode="update",
+            jumlah_siswa=1,
+            rombel_info=[("X TJKT 1", cg_id)],
+            rows=[
+                ("1001", "Baru", "newpass", cg_id, ""),
+            ],
+        )
+
+    response = logged_in_client.post(
+        '/admin/siswa/import',
+        data={'file': (buf, 'import.xlsx')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200
+    assert b'diperbarui' in response.data
+
+    with app.app_context():
+        s = Student.query.filter_by(student_id="1001").first()
+        assert s.name == "Baru"
+
+
+def test_siswa_import_default_password_is_nis(logged_in_client, app):
+    from app import db
+    from app.models import Student
+    from werkzeug.security import check_password_hash
+
+    with app.app_context():
+        cg_id = _create_class_group()
+
+        buf = _build_xlsx(
+            mode="skip",
+            jumlah_siswa=1,
+            rombel_info=[("X TJKT 1", cg_id)],
+            rows=[
+                ("2001", "Siti", "", cg_id, ""),
+            ],
+        )
+
+    response = logged_in_client.post(
+        '/admin/siswa/import',
+        data={'file': (buf, 'import.xlsx')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200
+    assert b'ditambahkan' in response.data
+
+    with app.app_context():
+        s = Student.query.filter_by(student_id="2001").first()
+        assert s is not None
+        assert check_password_hash(s.password, "2001")
+
+
+def test_siswa_import_abort_invalid_rombel(logged_in_client, app):
+    from app import db
+
+    with app.app_context():
+        cg_id = _create_class_group()
+
+        buf = _build_xlsx(
+            mode="skip",
+            jumlah_siswa=1,
+            rombel_info=[("X TJKT 1", cg_id)],
+            rows=[
+                ("3001", "Budi", "pass", 9999, ""),
+            ],
+        )
+
+    response = logged_in_client.post(
+        '/admin/siswa/import',
+        data={'file': (buf, 'import.xlsx')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200
+    assert b'tidak valid' in response.data
+
+
+def test_siswa_import_abort_missing_nis(logged_in_client, app):
+    from app import db
+
+    with app.app_context():
+        cg_id = _create_class_group()
+
+        buf = _build_xlsx(
+            mode="skip",
+            jumlah_siswa=1,
+            rombel_info=[("X TJKT 1", cg_id)],
+            rows=[
+                ("", "Budi", "pass", cg_id, ""),
+            ],
+        )
+
+    response = logged_in_client.post(
+        '/admin/siswa/import',
+        data={'file': (buf, 'import.xlsx')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200
+    assert b'NIS wajib' in response.data
+
+
+def test_siswa_import_abort_missing_nama(logged_in_client, app):
+    from app import db
+
+    with app.app_context():
+        cg_id = _create_class_group()
+
+        buf = _build_xlsx(
+            mode="skip",
+            jumlah_siswa=1,
+            rombel_info=[("X TJKT 1", cg_id)],
+            rows=[
+                ("4001", "", "pass", cg_id, ""),
+            ],
+        )
+
+    response = logged_in_client.post(
+        '/admin/siswa/import',
+        data={'file': (buf, 'import.xlsx')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200
+    assert b'Nama wajib' in response.data
+
+
+def test_siswa_import_abort_invalid_rombel_in_reference(logged_in_client, app):
+    from app import db
+
+    with app.app_context():
+        cg_id = _create_class_group()
+
+        buf = _build_xlsx(
+            mode="skip",
+            jumlah_siswa=0,
+            rombel_info=[("X TJKT 1", cg_id), ("Fake Class", 9999)],
+        )
+
+    response = logged_in_client.post(
+        '/admin/siswa/import',
+        data={'file': (buf, 'import.xlsx')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200
+    assert b'Rombel id tidak valid' in response.data
+
+
+def test_siswa_import_zero_jumlah(logged_in_client, app):
+    from app import db
+
+    with app.app_context():
+        buf = _build_xlsx(mode="skip", jumlah_siswa=0, rombel_info=[])
+
+    response = logged_in_client.post(
+        '/admin/siswa/import',
+        data={'file': (buf, 'import.xlsx')},
+        content_type='multipart/form-data',
+    )
+    assert response.status_code == 200
+    assert b'harus lebih dari 0' in response.data

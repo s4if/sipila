@@ -27,6 +27,15 @@
            hx-swap="innerHTML">
             <i class="bi bi-plus-lg"></i> Tambah Siswa
         </a>
+        {% if is_superadmin %}
+        <button type="button" class="btn btn-success" onclick="open_import_modal()">
+            <i class="bi bi-upload"></i> Import Excel
+        </button>
+        <a class="btn btn-outline-success" hx-boost="false"
+           href="{{ url_for('admin.siswa_template') }}">
+            <i class="bi bi-download"></i> Download Template
+        </a>
+        {% endif %}
     </div>
 </div>
 
@@ -71,6 +80,37 @@
     </div>
 </div>
 
+<div class="modal fade" id="modalImport" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Siswa dari Excel</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <form id="modalImportForm" hx-post="{{ url_for('admin.siswa_import') }}"
+                  hx-target="#hx_content" hx-swap="innerHTML"
+                  enctype="multipart/form-data"
+                  onsubmit="tutup_import_modal()">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="importFile" class="form-label">Pilih file .xlsx</label>
+                        <input type="file" class="form-control" id="importFile" name="file"
+                               accept=".xlsx" required/>
+                    </div>
+                    <div class="form-text">
+                        Download template terlebih dahulu, isi data siswa, lalu unggah kembali.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-success">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 var hapus_siswa = (id, nama) => {
     document.getElementById('modalHapusId').value = id;
@@ -80,6 +120,13 @@ var hapus_siswa = (id, nama) => {
 };
 var tutup_modal = () => {
     bootstrap.Modal.getInstance(document.getElementById('modalHapus')).hide();
+};
+var open_import_modal = () => {
+    var modal = new bootstrap.Modal(document.getElementById('modalImport'));
+    modal.show();
+};
+var tutup_import_modal = () => {
+    bootstrap.Modal.getInstance(document.getElementById('modalImport')).hide();
 };
 var edit_siswa = (id) => {
     var raw_url = "{{url_for('admin.siswa_edit', id=0)}}"
