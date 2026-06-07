@@ -331,7 +331,6 @@ def siswa_template():
 
     import openpyxl
     from openpyxl.styles import Font, PatternFill
-    from openpyxl.utils import quote_sheetname
     from openpyxl.worksheet.datavalidation import DataValidation
 
     wb = openpyxl.Workbook()

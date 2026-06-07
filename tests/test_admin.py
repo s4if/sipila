@@ -367,7 +367,6 @@ def test_siswa_import_update_mode(logged_in_client, app):
 
 
 def test_siswa_import_default_password_is_nis(logged_in_client, app):
-    from app import db
     from app.models import Student
     from werkzeug.security import check_password_hash
 
@@ -398,7 +397,6 @@ def test_siswa_import_default_password_is_nis(logged_in_client, app):
 
 
 def test_siswa_import_abort_invalid_rombel(logged_in_client, app):
-    from app import db
 
     with app.app_context():
         cg_id = _create_class_group()
@@ -422,7 +420,6 @@ def test_siswa_import_abort_invalid_rombel(logged_in_client, app):
 
 
 def test_siswa_import_abort_missing_nis(logged_in_client, app):
-    from app import db
 
     with app.app_context():
         cg_id = _create_class_group()
@@ -446,7 +443,6 @@ def test_siswa_import_abort_missing_nis(logged_in_client, app):
 
 
 def test_siswa_import_abort_missing_nama(logged_in_client, app):
-    from app import db
 
     with app.app_context():
         cg_id = _create_class_group()
@@ -470,7 +466,6 @@ def test_siswa_import_abort_missing_nama(logged_in_client, app):
 
 
 def test_siswa_import_abort_invalid_rombel_in_reference(logged_in_client, app):
-    from app import db
 
     with app.app_context():
         cg_id = _create_class_group()
@@ -491,7 +486,6 @@ def test_siswa_import_abort_invalid_rombel_in_reference(logged_in_client, app):
 
 
 def test_siswa_import_zero_jumlah(logged_in_client, app):
-    from app import db
 
     with app.app_context():
         buf = _build_xlsx(mode="skip", jumlah_siswa=0, rombel_info=[])
