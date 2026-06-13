@@ -931,11 +931,17 @@ def permintaan_detail(id):
         joinedload(BorrowingRequest.reviewer),
     ).get_or_404(id)
     can_review = _teacher_can_review(teacher.id, req.category_id)
+    category_teachers = (
+        Teacher.query.join(CategoryTeacher, CategoryTeacher.teacher_id == Teacher.id)
+        .filter(CategoryTeacher.category_id == req.category_id)
+        .all()
+    )
 
     return hx_render(
         "admin/permintaan_detail.jinja",
         req=req,
         can_review=can_review,
+        category_teachers=category_teachers,
     )
 
 

@@ -76,6 +76,20 @@
                             {% endif %}
                         </td>
                     </tr>
+                    <tr>
+                        <th class="ps-0">Penanggung Jawab</th>
+                        <td>
+                            {% if category_teachers %}
+                                <ul class="list-unstyled mb-0">
+                                {% for teacher in category_teachers %}
+                                    <li>- {{ teacher.name }}</li>
+                                {% endfor %}
+                                </ul>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
                 </table>
             </div>
         </div>
