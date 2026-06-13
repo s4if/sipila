@@ -1,11 +1,16 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 
+from .db import db
 from .helper import WIB, admin_required, hx_render
-from .models import BorrowingRequest, Student
+from .models import BorrowingRequest, Student, Teacher
 
 bp = Blueprint("supervisor", __name__, url_prefix="/supervisor")
+
+
+def _get_current_teacher():
+    return Teacher.query.filter_by(username=session.get("admin_name")).first()
 
 
 @bp.route("/monitor")
@@ -49,6 +54,7 @@ def monitor_data():
             joinedload(BorrowingRequest.student).joinedload(Student.class_group),
             joinedload(BorrowingRequest.category),
             joinedload(BorrowingRequest.reviewer),
+            joinedload(BorrowingRequest.confirmer),
         )
         .order_by(BorrowingRequest.id)
         .all()
@@ -60,6 +66,7 @@ def monitor_data():
         data.append(
             {
                 "no": i,
+                "request_id": req.id,
                 "student_nis": student.student_id if student else "-",
                 "student_name": student.name if student else "-",
                 "class_group": (
@@ -70,6 +77,79 @@ def monitor_data():
                 "category": req.category.name if req.category else "-",
                 "student_note": req.student_note or "-",
                 "reviewer": req.reviewer.name if req.reviewer else "-",
+                "confirmation": req.confirmation,
+                "confirmed_by": (
+                    req.confirmer.name if req.confirmer else None
+                ),
+                "confirmed_at": (
+                    req.confirmed_at.strftime("%d/%m/%Y %H:%M")
+                    if req.confirmed_at
+                    else None
+                ),
             }
         )
     return jsonify(data=data)
+
+
+@bp.route("/monitor/konfirmasi/<int:id>", methods=["POST"])
+@admin_required
+def monitor_konfirmasi(id):
+    teacher = _get_current_teacher()
+    if not teacher:
+        return jsonify(success=False, message="Sesi tidak valid"), 403
+
+    req = BorrowingRequest.query.get_or_404(id)
+
+    if req.status != "accepted":
+        return (
+            jsonify(
+                success=False, message="Hanya permintaan yang diterima dapat dikonfirmasi"
+            ),
+            400,
+        )
+
+    confirmation = request.form.get("confirmation")
+    if confirmation not in ("used", "not_used"):
+        return (
+            jsonify(success=False, message="Nilai konfirmasi tidak valid"),
+            400,
+        )
+
+    req.confirmation = confirmation
+    req.confirmed_by = teacher.id
+    req.confirmed_at = datetime.now(timezone.utc)
+    db.session.commit()
+
+    label = "digunakan" if confirmation == "used" else "tidak digunakan"
+    return jsonify(success=True, message="Konfirmasi berhasil: {}".format(label))
+
+
+@bp.route("/monitor/batalkan_konfirmasi/<int:id>", methods=["POST"])
+@admin_required
+def monitor_batalkan_konfirmasi(id):
+    teacher = _get_current_teacher()
+    if not teacher:
+        return jsonify(success=False, message="Sesi tidak valid"), 403
+
+    req = BorrowingRequest.query.get_or_404(id)
+
+    if req.status != "accepted":
+        return (
+            jsonify(
+                success=False, message="Hanya permintaan yang diterima dapat dikonfirmasi"
+            ),
+            400,
+        )
+
+    if not req.confirmation:
+        return (
+            jsonify(success=False, message="Permintaan belum dikonfirmasi"),
+            400,
+        )
+
+    req.confirmation = None
+    req.confirmed_by = None
+    req.confirmed_at = None
+    db.session.commit()
+
+    return jsonify(success=True, message="Konfirmasi berhasil dibatalkan")

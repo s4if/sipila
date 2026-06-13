@@ -111,10 +111,24 @@ class BorrowingRequest(db.Model):
         db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
     )
     reviewed_at = db.Column(db.DateTime, nullable=True)
+    confirmation = db.Column(db.String(16), nullable=True)
+    confirmed_by = db.Column(
+        db.Integer, db.ForeignKey("teachers.id"), nullable=True
+    )
+    confirmed_at = db.Column(db.DateTime, nullable=True)
 
     student = db.relationship("Student", backref="borrowing_requests")
     category = db.relationship("Category", backref="borrowing_requests")
-    reviewer = db.relationship("Teacher", backref="reviewed_requests")
+    reviewer = db.relationship(
+        "Teacher",
+        foreign_keys=[reviewed_by],
+        backref="reviewed_requests",
+    )
+    confirmer = db.relationship(
+        "Teacher",
+        foreign_keys=[confirmed_by],
+        backref="confirmed_requests",
+    )
 
     def __repr__(self):
         return "<BorrowingRequest student={} date={} status={}>".format(

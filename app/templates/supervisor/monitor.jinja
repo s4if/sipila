@@ -32,7 +32,7 @@
 
 <div class="row">
     <div class="col">
-        <table id="monitorTable" class="table table-striped table-bordered">
+        <table id="monitorTable" class="table table-striped table-bordered table-sm">
             <thead>
                 <tr>
                     <th>No</th>
@@ -41,7 +41,8 @@
                     <th>Rombel</th>
                     <th>Kategori</th>
                     <th>Catatan Siswa</th>
-                    <th>Diterima Oleh</th>
+                    <th>Penanggung Jawab</th>
+                    <th>Konfirmasi Penggunaan</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -49,8 +50,109 @@
     </div>
 </div>
 
+<div class="modal fade" id="modalKonfirmasi" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalKonfirmasiTitle">Konfirmasi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <div class="modal-body" id="modalKonfirmasiBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn" id="modalKonfirmasiBtn">Konfirmasi</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="monitorToast" class="toast" role="alert" aria-live="assertive">
+        <div class="toast-body" id="monitorToastMsg"></div>
+    </div>
+</div>
+
 <script>
 var monitorTable = null;
+var csrfToken = '{{ csrf_token() }}';
+var konfirmasiRequestId = null;
+var konfirmasiValue = null;
+
+var tampilkan_toast = function(msg) {
+    document.getElementById('monitorToastMsg').textContent = msg;
+    new bootstrap.Toast(document.getElementById('monitorToast')).show();
+};
+
+var konfirmasi_penggunaan = function(id, value) {
+    konfirmasiRequestId = id;
+    konfirmasiValue = value;
+    var title = value === 'used' ? 'Konfirmasi Digunakan' : 'Konfirmasi Tidak Digunakan';
+    var body = value === 'used'
+        ? 'Apakah Anda yakin ingin mengkonfirmasi permintaan ini sebagai <strong>digunakan</strong>?'
+        : 'Apakah Anda yakin ingin mengkonfirmasi permintaan ini sebagai <strong>tidak digunakan</strong>?';
+    var btnClass = value === 'used' ? 'btn btn-success' : 'btn btn-danger';
+    var btnText = value === 'used' ? 'Digunakan' : 'Tidak Digunakan';
+
+    document.getElementById('modalKonfirmasiTitle').textContent = title;
+    document.getElementById('modalKonfirmasiBody').innerHTML = body;
+    var btn = document.getElementById('modalKonfirmasiBtn');
+    btn.className = btnClass;
+    btn.textContent = btnText;
+    new bootstrap.Modal(document.getElementById('modalKonfirmasi')).show();
+};
+
+document.getElementById('modalKonfirmasiBtn').addEventListener('click', function() {
+    if (!konfirmasiRequestId || !konfirmasiValue) return;
+    var formData = new FormData();
+    formData.append('csrf_token', csrfToken);
+
+    var url;
+    if (konfirmasiValue === 'cancel') {
+        url = '/supervisor/monitor/batalkan_konfirmasi/' + konfirmasiRequestId;
+    } else {
+        formData.append('confirmation', konfirmasiValue);
+        url = '/supervisor/monitor/konfirmasi/' + konfirmasiRequestId;
+    }
+
+    fetch(url, { method: 'POST', body: formData })
+    .then(function(resp) { return resp.json(); })
+    .then(function(data) {
+        bootstrap.Modal.getInstance(document.getElementById('modalKonfirmasi')).hide();
+        tampilkan_toast(data.message);
+        if (data.success) muat_data();
+    });
+});
+
+var batalkan_konfirmasi = function(id) {
+    konfirmasiRequestId = id;
+    document.getElementById('modalKonfirmasiTitle').textContent = 'Batalkan Konfirmasi';
+    document.getElementById('modalKonfirmasiBody').innerHTML =
+        'Apakah Anda yakin ingin <strong>membatalkan konfirmasi</strong> pada permintaan ini?';
+    var btn = document.getElementById('modalKonfirmasiBtn');
+    btn.className = 'btn btn-warning';
+    btn.textContent = 'Batalkan Konfirmasi';
+    konfirmasiValue = 'cancel';
+    new bootstrap.Modal(document.getElementById('modalKonfirmasi')).show();
+};
+
+var render_konfirmasi = function(data, type, row) {
+    var id = row.request_id;
+    if (row.confirmation === 'used') {
+        return '<span class="badge bg-success">Digunakan</span>'
+            + ' <button class="btn btn-sm btn-outline-secondary ms-1" onclick="batalkan_konfirmasi(' + id + ')">'
+            + '<i class="bi bi-arrow-counterclockwise"></i></button>';
+    } else if (row.confirmation === 'not_used') {
+        return '<span class="badge bg-danger">Tidak Digunakan</span>'
+            + ' <button class="btn btn-sm btn-outline-secondary ms-1" onclick="batalkan_konfirmasi(' + id + ')">'
+            + '<i class="bi bi-arrow-counterclockwise"></i></button>';
+    }
+    return '<span class="badge bg-warning text-dark">Belum</span>'
+        + ' <button class="btn btn-sm btn-outline-success ms-1" onclick="konfirmasi_penggunaan(' + id + ', \'used\')" title="Digunakan">'
+        + '<i class="bi bi-check-lg"></i></button>'
+        + ' <button class="btn btn-sm btn-outline-danger ms-1" onclick="konfirmasi_penggunaan(' + id + ', \'not_used\')" title="Tidak Digunakan">'
+        + '<i class="bi bi-x-lg"></i></button>';
+};
+
 var muat_data = function() {
     var tanggal = document.getElementById('monitorTanggal').value;
     if (monitorTable) {
@@ -69,7 +171,8 @@ var muat_data = function() {
             { data: 'class_group' },
             { data: 'category' },
             { data: 'student_note' },
-            { data: 'reviewer' }
+            { data: 'reviewer' },
+            { data: null, render: render_konfirmasi, orderable: false }
         ],
         order: [[0, 'asc']],
         language: {
