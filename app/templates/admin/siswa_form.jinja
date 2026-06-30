@@ -11,16 +11,7 @@
 
 {{ render_notif(error, success, info) }}
 
-<nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="{{ url_for('admin.siswa') }}"
-            hx-get="{{ url_for('admin.siswa') }}"
-            hx-target="#hx_content"
-            hx-swap="innerHTML">Data Siswa</a></li>
-        <li class="breadcrumb-item active">{{ 'Edit Siswa' if student else 'Tambah Siswa' }}</li>
-    </ol>
-</nav>
-<h1 class="h2">{{ 'Edit Siswa' if student else 'Tambah Siswa' }}</h1>
+<h4 class="mb-3">{{ 'Edit Siswa' if student else 'Tambah Siswa' }}</h4>
 
 <div class="row">
     <div class="col">

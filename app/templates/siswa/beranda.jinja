@@ -11,24 +11,15 @@
 
 {{ render_notif(error, success, info) }}
 
-<nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item active">Beranda</li>
-    </ol>
-</nav>
-<h1 class="h2">Selamat Datang, {{ student_name }}</h1>
-
-<div class="row mb-3">
-    <div class="col">
-        <a class="btn btn-primary"
-           hx-get="{{ url_for('siswa.permintaan_tambah') }}">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h4 class="mb-0">Selamat Datang, {{ student_name }}</h4>
+    <a class="btn btn-primary"
+       hx-get="{{ url_for('siswa.permintaan_tambah') }}">
         <i class="bi bi-plus-circle"></i> Buat Permintaan
-        </a>
-    </div>
+    </a>
 </div>
 
-<div class="row">
-    <div class="col">
+<div class="table-responsive">
         <table id="permintaanTable" class="table table-striped table-bordered">
             <thead>
                 <tr>
@@ -43,7 +34,6 @@
             </thead>
             <tbody></tbody>
         </table>
-    </div>
 </div>
 
 <div class="modal fade" id="modalBatal" tabindex="-1">

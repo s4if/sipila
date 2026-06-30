@@ -11,19 +11,7 @@
 
 {{ render_notif(error, success, info) }}
 
-<nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item">
-            <a href="{{ url_for('admin.beranda') }}"
-               hx-get="{{ url_for('admin.beranda') }}"
-               hx-target="#hx_content"
-               hx-swap="innerHTML">Beranda</a>
-        </li>
-        <li class="breadcrumb-item active">Detail Permintaan</li>
-    </ol>
-</nav>
-
-<h1 class="h2">Detail Permintaan Peminjaman</h1>
+<h4 class="mb-3">Detail Permintaan Peminjaman</h4>
 
 <div class="row mb-4">
     <div class="col-md-6">

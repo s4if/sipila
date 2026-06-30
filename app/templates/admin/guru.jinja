@@ -11,27 +11,18 @@
 
 {{ render_notif(error, success, info) }}
 
-<nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item active">Data Guru</li>
-    </ol>
-</nav>
-<h1 class="h2">Data Guru</h1>
-
-<div class="row mb-3">
-    <div class="col">
-        <a class="btn btn-primary"
-           href="{{ url_for('admin.guru_tambah') }}"
-           hx-get="{{ url_for('admin.guru_tambah') }}"
-           hx-target="#hx_content"
-           hx-swap="innerHTML">
-            <i class="bi bi-plus-lg"></i> Tambah Guru
-        </a>
-    </div>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Data Guru</h4>
+    <a class="btn btn-primary"
+       href="{{ url_for('admin.guru_tambah') }}"
+       hx-get="{{ url_for('admin.guru_tambah') }}"
+       hx-target="#hx_content"
+       hx-swap="innerHTML">
+        <i class="bi bi-plus-lg"></i> Tambah Guru
+    </a>
 </div>
 
-<div class="row">
-    <div class="col">
+<div class="table-responsive">
         <table id="guruTable" class="table table-striped table-bordered">
             <thead>
                 <tr>
@@ -45,7 +36,6 @@
             </thead>
             <tbody></tbody>
         </table>
-    </div>
 </div>
 
 <div class="modal fade" id="modalHapus" tabindex="-1">

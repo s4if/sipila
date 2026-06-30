@@ -11,14 +11,7 @@
 
 {{ render_notif(error, success, info) }}
 
-<nav aria-label="breadcrumb">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a hx-get="{{ url_for('siswa.beranda') }}">Beranda</a></li>
-        <li class="breadcrumb-item active">{% if req %}Edit Permintaan{% else %}Buat Permintaan{% endif %}</li>
-    </ol>
-</nav>
-
-<h1 class="h2">{% if req %}Edit Permintaan{% else %}Buat Permintaan{% endif %}</h1>
+<h4 class="mb-3">{% if req %}Edit Permintaan{% else %}Buat Permintaan{% endif %}</h4>
 
 <div class="row">
     <div class="col">
