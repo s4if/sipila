@@ -15,7 +15,7 @@ Sipila is a Flask-based laptop lending management system for SMKIT Ihsanul Fikri
 - **Bootstrap 5** + **Bootstrap Icons** + **jQuery** (served as static assets)
 - **Gunicorn + Gevent** for production (Docker)
 - **SQLite** (instance folder) for database
-- **pytest + pytest-cov** for testing
+- **pytest + pytest-cov + pytest-xdist** for testing (parallelizable)
 
 ## Commands
 
@@ -29,8 +29,14 @@ uv run flask --app app run --debug
 # Run tests
 uv run pytest
 
-# Run tests with coverage
+# Run tests in parallel (uses all CPU cores)
+uv run pytest -n auto
+
+# Run tests with coverage (parallelization is slower with coverage; use serial)
 uv run pytest --cov=app tests/
+
+# Pin worker count
+uv run pytest -n 4
 
 # Database migrations
 uv run flask --app app db migrate -m "description"
@@ -132,6 +138,7 @@ sipila/
 - Test functions are flat (no classes) except for grouped tests (e.g., `TestSanitizeInput`)
 - Test naming: `test_<what>_<condition>` (e.g., `test_login_valid_credentials`)
 - Assertions check status codes, response content, and redirect locations
+- **Parallelization**: use `-n auto` (pytest-xdist) to run across all CPU cores. Safe by default because the `app` fixture is function-scoped with an in-memory SQLite DB per test — no cross-test or cross-worker state is shared. Prefer `-n auto` for fast feedback; drop it (run serial) when collecting coverage, since `pytest-cov` measures more accurately in a single process. Keep new tests isolated (no module-level mutable state, no reliance on test execution order) so they remain parallel-safe.
 
 ## Conventions
 

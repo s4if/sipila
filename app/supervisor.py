@@ -98,7 +98,7 @@ def monitor_konfirmasi(id):
     if not teacher:
         return jsonify(success=False, message="Sesi tidak valid"), 403
 
-    req = BorrowingRequest.query.get_or_404(id)
+    req = db.get_or_404(BorrowingRequest, id)
 
     if req.status != "accepted":
         return (
@@ -131,7 +131,7 @@ def monitor_batalkan_konfirmasi(id):
     if not teacher:
         return jsonify(success=False, message="Sesi tidak valid"), 403
 
-    req = BorrowingRequest.query.get_or_404(id)
+    req = db.get_or_404(BorrowingRequest, id)
 
     if req.status != "accepted":
         return (

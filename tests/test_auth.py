@@ -43,3 +43,53 @@ def test_logout(client):
     with client.session_transaction() as sess:
         assert 'logged_in' not in sess
         assert 'is_admin' not in sess
+
+
+# ---- Siswa login tests ----
+
+
+def test_get_siswa_login_page(client):
+    response = client.get('/login/siswa')
+    assert response.status_code == 200
+    assert b'Login Siswa' in response.data
+
+
+def test_siswa_login_valid_credentials(client, siswa_user):
+    response = client.post('/login/siswa', data={
+        'student_id': 'S001',
+        'password': 'rahasia',
+    })
+    assert response.status_code == 302
+    assert response.location == '/siswa/'
+
+
+def test_siswa_login_wrong_password(client, siswa_user):
+    response = client.post('/login/siswa', data={
+        'student_id': 'S001',
+        'password': 'salah',
+    })
+    assert response.status_code == 200
+    assert b'salah' in response.data.lower()
+
+
+def test_siswa_login_nonexistent_nis(client):
+    response = client.post('/login/siswa', data={
+        'student_id': 'TIDAKADA',
+        'password': 'rahasia',
+    })
+    assert response.status_code == 200
+    assert b'salah' in response.data.lower()
+
+
+def test_siswa_login_deleted_student(client, app, siswa_user):
+    from app import db
+    with app.app_context():
+        siswa_user.is_deleted = True
+        db.session.commit()
+
+    response = client.post('/login/siswa', data={
+        'student_id': 'S001',
+        'password': 'rahasia',
+    })
+    assert response.status_code == 200
+    assert b'salah' in response.data.lower()

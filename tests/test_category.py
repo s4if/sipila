@@ -100,7 +100,7 @@ def test_kategori_edit_success(logged_in_client, app):
     assert b'berhasil diperbarui' in response.data
 
     with app.app_context():
-        cat = Category.query.get(cat_id)
+        cat = db.session.get(Category, cat_id)
         assert cat.name == 'New Name'
 
 
@@ -159,7 +159,7 @@ def test_kategori_hapus_success(logged_in_client, app):
     assert b'berhasil dihapus' in response.data
 
     with app.app_context():
-        assert Category.query.get(cat_id) is None
+        assert db.session.get(Category, cat_id) is None
 
 
 def test_kategori_hapus_cascades_links(logged_in_client, app, admin_user):
