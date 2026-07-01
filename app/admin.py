@@ -140,7 +140,7 @@ def rombel_tambah():
 @bp.route("/rombel/edit/<int:id>", methods=["GET", "POST"])
 @superadmin_required
 def rombel_edit(id):
-    class_group = ClassGroup.query.get_or_404(id)
+    class_group = db.get_or_404(ClassGroup, id)
     form = RombelForm(obj=class_group)
     form.homeroom_teacher_id.choices = [("", "Belum ditentukan")] + [
         (a.id, a.name or "[nama belum di set]")
@@ -166,7 +166,7 @@ def rombel_edit(id):
 @superadmin_required
 def rombel_hapus():
     id = request.form.get("id", type=int)
-    class_group = ClassGroup.query.get_or_404(id)
+    class_group = db.get_or_404(ClassGroup, id)
     notif = {}
     active_students = Student.query.filter_by(
         class_group_id=id, is_deleted=False
@@ -274,7 +274,7 @@ def siswa_tambah():
 @bp.route("/siswa/edit/<int:id>", methods=["GET", "POST"])
 @superadmin_required
 def siswa_edit(id):
-    student = Student.query.get_or_404(id)
+    student = db.get_or_404(Student, id)
     form = SiswaForm(obj=student)
     form.class_group_id.choices = [("", "Pilih rombel")] + [
         (cg.id, cg.display_name)
@@ -317,7 +317,7 @@ def siswa_edit(id):
 @superadmin_required
 def siswa_hapus():
     id = request.form.get("id", type=int)
-    student = Student.query.get_or_404(id)
+    student = db.get_or_404(Student, id)
     student.is_deleted = True
     db.session.commit()
     notif = {"success": "Siswa berhasil dihapus"}
@@ -666,7 +666,7 @@ def guru_tambah():
 @bp.route("/guru/edit/<int:id>", methods=["GET", "POST"])
 @superadmin_required
 def guru_edit(id):
-    admin = Teacher.query.get_or_404(id)
+    admin = db.get_or_404(Teacher, id)
     form = GuruForm(obj=admin)
     if request.method == "GET":
         return hx_render("admin/guru_form.jinja", guru=admin, form=form)
@@ -699,7 +699,7 @@ def guru_edit(id):
 @superadmin_required
 def guru_hapus():
     id = request.form.get("id", type=int)
-    admin = Teacher.query.get_or_404(id)
+    admin = db.get_or_404(Teacher, id)
     notif = {}
     if admin.username == session["admin_name"]:
         notif["error"] = "Tidak dapat menghapus akun yang sedang digunakan"
@@ -799,7 +799,7 @@ def kategori_tambah():
 @bp.route("/kategori/edit/<int:id>", methods=["GET", "POST"])
 @superadmin_required
 def kategori_edit(id):
-    category = Category.query.get_or_404(id)
+    category = db.get_or_404(Category, id)
     form = KategoriForm(obj=category)
     _populate_kategori_teacher_choices(form)
     if request.method == "GET":
@@ -833,7 +833,7 @@ def kategori_edit(id):
 @superadmin_required
 def kategori_hapus():
     id = request.form.get("id", type=int)
-    category = Category.query.get_or_404(id)
+    category = db.get_or_404(Category, id)
     db.session.delete(category)
     db.session.commit()
     notif = {"success": "Kategori berhasil dihapus"}
@@ -947,11 +947,15 @@ def permintaan_detail(id):
     from sqlalchemy.orm import joinedload
 
     teacher = _get_current_teacher()
-    req = BorrowingRequest.query.options(
-        joinedload(BorrowingRequest.student).joinedload(Student.class_group),
-        joinedload(BorrowingRequest.category),
-        joinedload(BorrowingRequest.reviewer),
-    ).get_or_404(id)
+    req = db.get_or_404(
+        BorrowingRequest,
+        id,
+        options=[
+            joinedload(BorrowingRequest.student).joinedload(Student.class_group),
+            joinedload(BorrowingRequest.category),
+            joinedload(BorrowingRequest.reviewer),
+        ],
+    )
     can_review = _teacher_can_review(teacher.id, req.category_id)
     category_teachers = (
         Teacher.query.join(CategoryTeacher, CategoryTeacher.teacher_id == Teacher.id)
@@ -971,7 +975,7 @@ def permintaan_detail(id):
 @admin_required
 def permintaan_terima(id):
     teacher = _get_current_teacher()
-    req = BorrowingRequest.query.get_or_404(id)
+    req = db.get_or_404(BorrowingRequest, id)
 
     if not _teacher_can_review(teacher.id, req.category_id):
         return hx_render(
@@ -1010,7 +1014,7 @@ def permintaan_terima(id):
 @admin_required
 def permintaan_tolak(id):
     teacher = _get_current_teacher()
-    req = BorrowingRequest.query.get_or_404(id)
+    req = db.get_or_404(BorrowingRequest, id)
 
     if not _teacher_can_review(teacher.id, req.category_id):
         return hx_render(
@@ -1049,7 +1053,7 @@ def permintaan_tolak(id):
 @admin_required
 def permintaan_batalkan(id):
     teacher = _get_current_teacher()
-    req = BorrowingRequest.query.get_or_404(id)
+    req = db.get_or_404(BorrowingRequest, id)
 
     if not _teacher_can_review(teacher.id, req.category_id):
         return hx_render(

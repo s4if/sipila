@@ -144,7 +144,7 @@ def permintaan_tambah():
 @login_required
 def permintaan_edit(id):
     min_date, max_date = _date_range()
-    req = BorrowingRequest.query.get_or_404(id)
+    req = db.get_or_404(BorrowingRequest, id)
     if req.student_id != session["student_db_id"]:
         return redirect(url_for("siswa.beranda"))
     if req.status != "pending":
@@ -208,7 +208,7 @@ def permintaan_edit(id):
 @login_required
 def permintaan_batal():
     id = request.form.get("id", type=int)
-    req = BorrowingRequest.query.get_or_404(id)
+    req = db.get_or_404(BorrowingRequest, id)
     notif = {}
     if req.student_id != session["student_db_id"]:
         notif["error"] = "Anda tidak berwenang membatalkan permintaan ini"
@@ -226,10 +226,14 @@ def permintaan_batal():
 def permintaan_detail(id):
     from sqlalchemy.orm import joinedload
 
-    req = BorrowingRequest.query.options(
-        joinedload(BorrowingRequest.category),
-        joinedload(BorrowingRequest.reviewer),
-    ).get_or_404(id)
+    req = db.get_or_404(
+        BorrowingRequest,
+        id,
+        options=[
+            joinedload(BorrowingRequest.category),
+            joinedload(BorrowingRequest.reviewer),
+        ],
+    )
 
     if req.student_id != session["student_db_id"]:
         return redirect(url_for("siswa.beranda"))

@@ -104,7 +104,7 @@ def test_monitor_konfirmasi_used(logged_in_client, app):
     assert "digunakan" in data["message"]
 
     with app.app_context():
-        req = BorrowingRequest.query.get(req_id)
+        req = db.session.get(BorrowingRequest, req_id)
         assert req.confirmation == "used"
         assert req.confirmed_by is not None
         assert req.confirmed_at is not None
@@ -122,7 +122,7 @@ def test_monitor_konfirmasi_not_used(logged_in_client, app):
     assert "tidak digunakan" in data["message"]
 
     with app.app_context():
-        req = BorrowingRequest.query.get(req_id)
+        req = db.session.get(BorrowingRequest, req_id)
         assert req.confirmation == "not_used"
 
 
@@ -187,7 +187,7 @@ def test_monitor_batalkan_konfirmasi(logged_in_client, app):
     assert "dibatalkan" in data["message"]
 
     with app.app_context():
-        req = BorrowingRequest.query.get(req_id)
+        req = db.session.get(BorrowingRequest, req_id)
         assert req.confirmation is None
         assert req.confirmed_by is None
         assert req.confirmed_at is None
@@ -232,14 +232,14 @@ def test_monitor_konfirmasi_reversible(logged_in_client, app):
         data={"confirmation": "used"},
     )
     with app.app_context():
-        req = BorrowingRequest.query.get(req_id)
+        req = db.session.get(BorrowingRequest, req_id)
         assert req.confirmation == "used"
 
     logged_in_client.post(
         "/supervisor/monitor/batalkan_konfirmasi/{}".format(req_id),
     )
     with app.app_context():
-        req = BorrowingRequest.query.get(req_id)
+        req = db.session.get(BorrowingRequest, req_id)
         assert req.confirmation is None
 
     logged_in_client.post(
@@ -247,5 +247,5 @@ def test_monitor_konfirmasi_reversible(logged_in_client, app):
         data={"confirmation": "not_used"},
     )
     with app.app_context():
-        req = BorrowingRequest.query.get(req_id)
+        req = db.session.get(BorrowingRequest, req_id)
         assert req.confirmation == "not_used"
