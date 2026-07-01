@@ -28,11 +28,14 @@ def permintaan_data():
     from sqlalchemy.orm import joinedload
 
     student_db_id = session["student_db_id"]
+    today = datetime.now(WIB).date()
+    start_date = today - timedelta(days=7)
     requests = (
         BorrowingRequest.query.options(
             joinedload(BorrowingRequest.category),
         )
         .filter_by(student_id=student_db_id)
+        .filter(BorrowingRequest.date >= start_date)
         .order_by(BorrowingRequest.date.desc())
         .all()
     )

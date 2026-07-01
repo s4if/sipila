@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, jsonify, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -863,6 +863,16 @@ def _teacher_can_review(teacher_id, category_id):
     )
 
 
+def _is_kadaluarsa(req, now=None):
+    # Permintaan pending dianggap kadaluarsa jika tanggal peminjaman sudah lewat
+    # atau sudah lewat jam 17:00 pada hari peminjaman
+    if req.status != "pending":
+        return False
+    if now is None:
+        now = datetime.now(WIB)
+    return req.date < now.date() or (req.date == now.date() and now.hour >= 17)
+
+
 @bp.route("/permintaan/data")
 @admin_required
 def permintaan_data():
@@ -880,14 +890,24 @@ def permintaan_data():
     if not is_superadmin:
         query = query.filter(BorrowingRequest.category_id.in_(teacher_category_ids))
 
+    today = datetime.now(WIB).date()
+    start_date = today - timedelta(days=7)
+    end_date = today + timedelta(days=14)
+    query = query.filter(
+        BorrowingRequest.date >= start_date,
+        BorrowingRequest.date <= end_date,
+    )
+
     requests = query.order_by(BorrowingRequest.date.desc()).all()
 
     status_badges = {
         "pending": '<span class="badge bg-warning text-dark">Pending</span>',
         "accepted": '<span class="badge bg-success">Diterima</span>',
         "rejected": '<span class="badge bg-danger">Ditolak</span>',
+        "expired": '<span class="badge bg-secondary">Kadaluarsa</span>',
     }
 
+    now = datetime.now(WIB)
     data = []
     for i, req in enumerate(requests, 1):
         student = req.student
@@ -904,6 +924,8 @@ def permintaan_data():
             '<i class="bi bi-eye"></i> Detail</a>'
         )
 
+        status = "expired" if _is_kadaluarsa(req, now) else req.status
+
         data.append(
             {
                 "no": i,
@@ -912,7 +934,7 @@ def permintaan_data():
                 "student_name": student_name,
                 "class_group": cat_group,
                 "category": category_name,
-                "status": status_badges.get(req.status, req.status),
+                "status": status_badges.get(status, status),
                 "actions": detail_btn,
             }
         )
