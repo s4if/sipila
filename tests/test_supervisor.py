@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from itertools import count
 
 from app import db
 from app.models import (
@@ -10,11 +11,14 @@ from app.models import (
 )
 from werkzeug.security import generate_password_hash
 
+_setup_seq = count()
 
-def _setup_borrowing_request(app, status="accepted", confirmation=None):
+
+def _setup_borrowing_request(app, status="accepted", confirmation=None, tanggal=None):
     with app.app_context():
+        n = next(_setup_seq)
         teacher = Teacher(
-            username="guru_review",
+            username="guru_review_{}".format(n),
             password=generate_password_hash("pass"),
             name="Guru Review",
         )
@@ -26,7 +30,7 @@ def _setup_borrowing_request(app, status="accepted", confirmation=None):
         db.session.flush()
 
         student = Student(
-            student_id="S001",
+            student_id="S{:03d}".format(n + 1),
             name="Siswa Satu",
             password=generate_password_hash("pass"),
             class_group_id=cg.id,
@@ -34,14 +38,14 @@ def _setup_borrowing_request(app, status="accepted", confirmation=None):
         db.session.add(student)
         db.session.flush()
 
-        cat = Category(name="Laptop")
+        cat = Category(name="Laptop {}".format(n))
         db.session.add(cat)
         db.session.flush()
 
         req = BorrowingRequest(
             student_id=student.id,
             category_id=cat.id,
-            date=date.today(),
+            date=tanggal if tanggal else date.today(),
             status=status,
             reviewed_by=teacher.id,
             reviewed_at=datetime.now(timezone.utc),
@@ -249,3 +253,77 @@ def test_monitor_konfirmasi_reversible(logged_in_client, app):
     with app.app_context():
         req = db.session.get(BorrowingRequest, req_id)
         assert req.confirmation == "not_used"
+
+
+def test_monitor_export_requires_login(client):
+    response = client.get("/supervisor/monitor/export")
+    assert response.status_code == 302
+    assert "login" in response.location
+
+
+def test_monitor_export_returns_xlsx(logged_in_client, app):
+    _setup_borrowing_request(app)
+    response = logged_in_client.get("/supervisor/monitor/export")
+    assert response.status_code == 200
+    assert (
+        response.mimetype
+        == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert "attachment" in response.headers["Content-Disposition"]
+    assert "laporan_peminjaman" in response.headers["Content-Disposition"]
+
+
+def test_monitor_export_contains_row(logged_in_client, app):
+    import io
+    import openpyxl
+
+    _setup_borrowing_request(app)
+    response = logged_in_client.get("/supervisor/monitor/export")
+    wb = openpyxl.load_workbook(io.BytesIO(response.data))
+    ws = wb.active
+    # header pada baris 5, data mulai baris 6
+    assert ws.cell(row=5, column=1).value == "No"
+    assert ws.cell(row=6, column=4).value == "Siswa Satu"
+    assert ws.cell(row=6, column=9).value == "Belum Dikonfirmasi"
+
+
+def test_monitor_export_only_used_filter(logged_in_client, app):
+    import io
+    import openpyxl
+
+    _setup_borrowing_request(app, confirmation=None)
+    _setup_borrowing_request(app, confirmation="used")
+    _setup_borrowing_request(app, confirmation="not_used")
+
+    # semua permintaan
+    resp_all = logged_in_client.get("/supervisor/monitor/export")
+    wb_all = openpyxl.load_workbook(io.BytesIO(resp_all.data))
+    # hitung baris data (header di baris 5)
+    jumlah_semua = wb_all.active.max_row - 5
+    assert jumlah_semua == 3
+
+    # hanya yang digunakan
+    resp_used = logged_in_client.get("/supervisor/monitor/export?hanya_digunakan=1")
+    wb_used = openpyxl.load_workbook(io.BytesIO(resp_used.data))
+    ws_used = wb_used.active
+    jumlah_digunakan = ws_used.max_row - 5
+    assert jumlah_digunakan == 1
+    assert ws_used.cell(row=6, column=9).value == "Digunakan"
+    assert ws_used["A3"].value == "Filter: Hanya yang digunakan"
+
+
+def test_monitor_export_date_range(logged_in_client, app):
+    import io
+    import openpyxl
+
+    _setup_borrowing_request(app, tanggal=date(2025, 1, 15))
+    _setup_borrowing_request(app, tanggal=date(2025, 6, 10))
+
+    # rentang hanya mencakup data pertama
+    resp = logged_in_client.get(
+        "/supervisor/monitor/export?tanggal_mulai=2025-01-01&tanggal_akhir=2025-02-01"
+    )
+    wb = openpyxl.load_workbook(io.BytesIO(resp.data))
+    ws = wb.active
+    assert ws.max_row - 5 == 1
+    assert ws.cell(row=6, column=2).value == "15/01/2025"

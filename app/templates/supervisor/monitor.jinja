@@ -42,6 +42,43 @@
         </table>
 </div>
 
+<div class="card mt-4">
+    <div class="card-body">
+        <h5 class="card-title mb-3">
+            <i class="bi bi-file-earmark-spreadsheet"></i> Unduh Laporan
+        </h5>
+        <div class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label small mb-1" for="laporanMulai">Tanggal Mulai</label>
+                <input type="date" id="laporanMulai" class="form-control"
+                       value="{{ min_date.strftime('%Y-%m-%d') }}"
+                       min="{{ min_date.strftime('%Y-%m-%d') }}"
+                       max="{{ max_date.strftime('%Y-%m-%d') }}">
+            </div>
+            <div class="col-auto">
+                <label class="form-label small mb-1" for="laporanAkhir">Tanggal Akhir</label>
+                <input type="date" id="laporanAkhir" class="form-control"
+                       value="{{ tanggal.strftime('%Y-%m-%d') }}"
+                       min="{{ min_date.strftime('%Y-%m-%d') }}"
+                       max="{{ max_date.strftime('%Y-%m-%d') }}">
+            </div>
+            <div class="col-auto">
+                <div class="form-check mt-4">
+                    <input class="form-check-input" type="checkbox" id="laporanHanyaDigunakan">
+                    <label class="form-check-label" for="laporanHanyaDigunakan">
+                        Hanya yang digunakan
+                    </label>
+                </div>
+            </div>
+            <div class="col-auto">
+                <button type="button" class="btn btn-success" id="btnUnduhLaporan">
+                    <i class="bi bi-download"></i> Unduh Excel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="modalKonfirmasi" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -178,6 +215,18 @@ var muat_data = function() {
         }
     });
 };
+var unduh_laporan = function() {
+    var mulai = document.getElementById('laporanMulai').value;
+    var akhir = document.getElementById('laporanAkhir').value;
+    var hanyaDigunakan = document.getElementById('laporanHanyaDigunakan').checked ? '1' : '0';
+    var params = new URLSearchParams({
+        tanggal_mulai: mulai,
+        tanggal_akhir: akhir,
+        hanya_digunakan: hanyaDigunakan
+    });
+    window.location.href = '{{ url_for("supervisor.monitor_export") }}?' + params.toString();
+};
+
 (function() {
     if ($.fn.DataTable.isDataTable('#monitorTable')) {
         $('#monitorTable').DataTable().destroy();
@@ -185,6 +234,7 @@ var muat_data = function() {
     }
     muat_data();
     document.getElementById('monitorTanggal').addEventListener('change', muat_data);
+    document.getElementById('btnUnduhLaporan').addEventListener('click', unduh_laporan);
 })();
 </script>
 

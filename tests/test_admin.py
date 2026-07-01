@@ -2,214 +2,252 @@ from app import db
 
 
 def test_admin_dashboard_redirects_anonymous(client):
-    response = client.get('/admin/')
+    response = client.get("/admin/")
     assert response.status_code == 302
-    assert 'login' in response.location
+    assert "login" in response.location
 
 
 def test_admin_dashboard_returns_200_when_logged_in(logged_in_client):
-    response = logged_in_client.get('/admin/')
+    response = logged_in_client.get("/admin/")
     assert response.status_code == 200
 
 
 def test_admin_password_page_redirects_anonymous(client):
-    response = client.get('/admin/ganti_password')
+    response = client.get("/admin/ganti_password")
     assert response.status_code == 302
-    assert 'login' in response.location
+    assert "login" in response.location
 
 
 def test_admin_password_page_get(logged_in_client):
-    response = logged_in_client.get('/admin/ganti_password')
+    response = logged_in_client.get("/admin/ganti_password")
     assert response.status_code == 200
-    assert b'password' in response.data.lower() or b'ganti' in response.data
+    assert b"password" in response.data.lower() or b"ganti" in response.data
 
 
 def test_change_password_success(logged_in_client):
-    response = logged_in_client.post('/admin/ganti_password', data={
-        'current_password': 'secret',
-        'new_password': 'newsecret123',
-        'confirm_password': 'newsecret123',
-    })
+    response = logged_in_client.post(
+        "/admin/ganti_password",
+        data={
+            "current_password": "secret",
+            "new_password": "newsecret123",
+            "confirm_password": "newsecret123",
+        },
+    )
     assert response.status_code == 200
-    assert b'berhasil' in response.data.lower()
+    assert b"berhasil" in response.data.lower()
 
 
 def test_change_password_mismatch(logged_in_client):
-    response = logged_in_client.post('/admin/ganti_password', data={
-        'current_password': 'secret',
-        'new_password': 'newpass1',
-        'confirm_password': 'newpass2',
-    })
+    response = logged_in_client.post(
+        "/admin/ganti_password",
+        data={
+            "current_password": "secret",
+            "new_password": "newpass1",
+            "confirm_password": "newpass2",
+        },
+    )
     assert response.status_code == 200
-    assert b'tidak sesuai' in response.data
+    assert b"tidak sesuai" in response.data
 
 
 def test_change_password_wrong_current(logged_in_client):
-    response = logged_in_client.post('/admin/ganti_password', data={
-        'current_password': 'wrongpassword',
-        'new_password': 'newsecret123',
-        'confirm_password': 'newsecret123',
-    })
+    response = logged_in_client.post(
+        "/admin/ganti_password",
+        data={
+            "current_password": "wrongpassword",
+            "new_password": "newsecret123",
+            "confirm_password": "newsecret123",
+        },
+    )
     assert response.status_code == 200
-    assert b'tidak sesuai' in response.data or b'salah' in response.data
+    assert b"tidak sesuai" in response.data or b"salah" in response.data
 
 
 # ---- Guru CRUD tests ----
 
 
 def test_guru_list_redirects_anonymous(client):
-    response = client.get('/admin/guru')
+    response = client.get("/admin/guru")
     assert response.status_code == 302
-    assert 'login' in response.location
+    assert "login" in response.location
 
 
 def test_guru_list_returns_200(logged_in_client):
-    response = logged_in_client.get('/admin/guru')
+    response = logged_in_client.get("/admin/guru")
     assert response.status_code == 200
-    assert b'Data Guru' in response.data
+    assert b"Data Guru" in response.data
 
 
 def test_guru_data_returns_json(logged_in_client, admin_user):
-    response = logged_in_client.get('/admin/guru/data')
+    response = logged_in_client.get("/admin/guru/data")
     assert response.status_code == 200
     data = response.get_json()
-    assert 'data' in data
-    assert len(data['data']) >= 1
-    assert data['data'][0]['username'] == 'admin'
+    assert "data" in data
+    assert len(data["data"]) >= 1
+    assert data["data"][0]["username"] == "admin"
 
 
 def test_guru_tambah_page_get(logged_in_client):
-    response = logged_in_client.get('/admin/guru/tambah')
+    response = logged_in_client.get("/admin/guru/tambah")
     assert response.status_code == 200
-    assert b'Tambah Guru' in response.data
+    assert b"Tambah Guru" in response.data
 
 
 def test_guru_tambah_success(logged_in_client, app):
-    response = logged_in_client.post('/admin/guru/tambah', data={
-        'username': 'guru1',
-        'name': 'Guru Satu',
-        'contact_person': '081234567890',
-        'password': 'password123',
-    })
+    response = logged_in_client.post(
+        "/admin/guru/tambah",
+        data={
+            "username": "guru1",
+            "name": "Guru Satu",
+            "contact_person": "081234567890",
+            "password": "password123",
+        },
+    )
     assert response.status_code == 200
-    assert b'berhasil ditambahkan' in response.data
+    assert b"berhasil ditambahkan" in response.data
 
     with app.app_context():
         from app.models import Teacher
-        guru = Teacher.query.filter_by(username='guru1').first()
+
+        guru = Teacher.query.filter_by(username="guru1").first()
         assert guru is not None
-        assert guru.name == 'Guru Satu'
+        assert guru.name == "Guru Satu"
         assert guru.is_superadmin is False
 
 
 def test_guru_tambah_duplicate_username(logged_in_client):
-    response = logged_in_client.post('/admin/guru/tambah', data={
-        'username': 'admin',
-        'name': 'Duplikat',
-        'password': 'password123',
-    })
+    response = logged_in_client.post(
+        "/admin/guru/tambah",
+        data={
+            "username": "admin",
+            "name": "Duplikat",
+            "password": "password123",
+        },
+    )
     assert response.status_code == 200
-    assert b'sudah digunakan' in response.data
+    assert b"sudah digunakan" in response.data
 
 
 def test_guru_tambah_without_password(logged_in_client):
-    response = logged_in_client.post('/admin/guru/tambah', data={
-        'username': 'guru2',
-        'name': 'Guru Dua',
-        'password': '',
-    })
+    response = logged_in_client.post(
+        "/admin/guru/tambah",
+        data={
+            "username": "guru2",
+            "name": "Guru Dua",
+            "password": "",
+        },
+    )
     assert response.status_code == 200
-    assert b'wajib diisi' in response.data
+    assert b"wajib diisi" in response.data
 
 
 def test_guru_edit_page_get(logged_in_client, admin_user):
-    response = logged_in_client.get(f'/admin/guru/edit/{admin_user.id}')
+    response = logged_in_client.get(f"/admin/guru/edit/{admin_user.id}")
     assert response.status_code == 200
-    assert b'Edit Guru' in response.data
+    assert b"Edit Guru" in response.data
 
 
 def test_guru_edit_success(logged_in_client, app, admin_user):
-    response = logged_in_client.post(f'/admin/guru/edit/{admin_user.id}', data={
-        'username': 'admin',
-        'name': 'Admin Baru',
-        'contact_person': '089999',
-        'password': '',
-    })
+    response = logged_in_client.post(
+        f"/admin/guru/edit/{admin_user.id}",
+        data={
+            "username": "admin",
+            "name": "Admin Baru",
+            "contact_person": "089999",
+            "password": "",
+        },
+    )
     assert response.status_code == 200
-    assert b'berhasil diperbarui' in response.data
+    assert b"berhasil diperbarui" in response.data
 
     with app.app_context():
         from app.models import Teacher
+
         guru = db.session.get(Teacher, admin_user.id)
-        assert guru.name == 'Admin Baru'
+        assert guru.name == "Admin Baru"
 
 
 def test_guru_edit_duplicate_username(logged_in_client, app):
     from werkzeug.security import generate_password_hash
+
     from app import db
     from app.models import Teacher
+
     with app.app_context():
         guru2 = Teacher(
-            username='guru2',
-            password=generate_password_hash('pass'),
+            username="guru2",
+            password=generate_password_hash("pass"),
         )
         db.session.add(guru2)
         db.session.commit()
         guru2_id = guru2.id
 
-    response = logged_in_client.post(f'/admin/guru/edit/{guru2_id}', data={
-        'username': 'admin',
-        'name': 'Guru Dua',
-        'password': '',
-    })
+    response = logged_in_client.post(
+        f"/admin/guru/edit/{guru2_id}",
+        data={
+            "username": "admin",
+            "name": "Guru Dua",
+            "password": "",
+        },
+    )
     assert response.status_code == 200
-    assert b'sudah digunakan' in response.data
+    assert b"sudah digunakan" in response.data
 
 
 def test_guru_edit_with_new_password(logged_in_client, app, admin_user):
-    response = logged_in_client.post(f'/admin/guru/edit/{admin_user.id}', data={
-        'username': 'admin',
-        'name': 'Admin',
-        'password': 'newpassword456',
-    })
+    response = logged_in_client.post(
+        f"/admin/guru/edit/{admin_user.id}",
+        data={
+            "username": "admin",
+            "name": "Admin",
+            "password": "newpassword456",
+        },
+    )
     assert response.status_code == 200
-    assert b'berhasil diperbarui' in response.data
+    assert b"berhasil diperbarui" in response.data
 
     with app.app_context():
         from werkzeug.security import check_password_hash
+
         from app.models import Teacher
+
         guru = db.session.get(Teacher, admin_user.id)
-        assert check_password_hash(guru.password, 'newpassword456')
+        assert check_password_hash(guru.password, "newpassword456")
 
 
 def test_guru_hapus_success(logged_in_client, app):
     from werkzeug.security import generate_password_hash
-    from app.models import Teacher
+
     from app import db
+    from app.models import Teacher
+
     with app.app_context():
         guru = Teacher(
-            username='hapus_guru',
-            password=generate_password_hash('pass'),
+            username="hapus_guru",
+            password=generate_password_hash("pass"),
         )
         db.session.add(guru)
         db.session.commit()
         guru_id = guru.id
 
-    response = logged_in_client.post('/admin/guru/hapus', data={'id': guru_id})
+    response = logged_in_client.post("/admin/guru/hapus", data={"id": guru_id})
     assert response.status_code == 200
-    assert b'berhasil dihapus' in response.data
+    assert b"berhasil dihapus" in response.data
 
 
 def test_guru_hapus_self_blocked(logged_in_client, admin_user):
-    response = logged_in_client.post('/admin/guru/hapus', data={
-        'id': admin_user.id,
-    })
+    response = logged_in_client.post(
+        "/admin/guru/hapus",
+        data={
+            "id": admin_user.id,
+        },
+    )
     assert response.status_code == 200
-    assert b'tidak dapat menghapus' in response.data.lower()
+    assert b"tidak dapat menghapus" in response.data.lower()
 
 
 def test_guru_hapus_404(logged_in_client):
-    response = logged_in_client.post('/admin/guru/hapus', data={'id': 9999})
+    response = logged_in_client.post("/admin/guru/hapus", data={"id": 9999})
     assert response.status_code == 404
 
 
@@ -219,6 +257,7 @@ def test_guru_hapus_404(logged_in_client):
 def _create_class_group(name="1", grade_level="X", major="TJKT"):
     from app import db
     from app.models import ClassGroup
+
     cg = ClassGroup(name=name, grade_level=grade_level, major=major)
     db.session.add(cg)
     db.session.commit()
@@ -227,6 +266,7 @@ def _create_class_group(name="1", grade_level="X", major="TJKT"):
 
 def _build_xlsx(mode="skip", jumlah_siswa=0, rombel_info=None, rows=None):
     from io import BytesIO
+
     import openpyxl
 
     if rombel_info is None:
@@ -265,7 +305,7 @@ def _build_xlsx(mode="skip", jumlah_siswa=0, rombel_info=None, rows=None):
 
 
 def test_siswa_template_download(logged_in_client):
-    response = logged_in_client.get('/admin/siswa/template')
+    response = logged_in_client.get("/admin/siswa/template")
     assert response.status_code == 200
     assert response.content_type == (
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -274,27 +314,29 @@ def test_siswa_template_download(logged_in_client):
 
 
 def test_siswa_import_no_file(logged_in_client):
-    response = logged_in_client.post('/admin/siswa/import')
+    response = logged_in_client.post("/admin/siswa/import")
     assert response.status_code == 200
-    assert b'Tidak ada file' in response.data
+    assert b"Tidak ada file" in response.data
 
 
 def test_siswa_import_wrong_extension(logged_in_client):
     from io import BytesIO
+
     buf = BytesIO(b"not an xlsx")
     response = logged_in_client.post(
-        '/admin/siswa/import',
-        data={'file': (buf, 'data.csv')},
-        content_type='multipart/form-data',
+        "/admin/siswa/import",
+        data={"file": (buf, "data.csv")},
+        content_type="multipart/form-data",
     )
     assert response.status_code == 200
-    assert b'harus berformat' in response.data
+    assert b"harus berformat" in response.data
 
 
 def test_siswa_import_skip_mode(logged_in_client, app):
+    from werkzeug.security import generate_password_hash
+
     from app import db
     from app.models import Student
-    from werkzeug.security import generate_password_hash
 
     with app.app_context():
         cg_id = _create_class_group()
@@ -318,13 +360,13 @@ def test_siswa_import_skip_mode(logged_in_client, app):
         )
 
     response = logged_in_client.post(
-        '/admin/siswa/import',
-        data={'file': (buf, 'import.xlsx')},
-        content_type='multipart/form-data',
+        "/admin/siswa/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
     )
     assert response.status_code == 200
-    assert b'ditambahkan' in response.data
-    assert b'dilewati' in response.data
+    assert b"ditambahkan" in response.data
+    assert b"dilewati" in response.data
 
     with app.app_context():
         assert Student.query.filter_by(student_id="1001").first().name == "Lama"
@@ -332,9 +374,10 @@ def test_siswa_import_skip_mode(logged_in_client, app):
 
 
 def test_siswa_import_update_mode(logged_in_client, app):
+    from werkzeug.security import generate_password_hash
+
     from app import db
     from app.models import Student
-    from werkzeug.security import generate_password_hash
 
     with app.app_context():
         cg_id = _create_class_group()
@@ -357,12 +400,12 @@ def test_siswa_import_update_mode(logged_in_client, app):
         )
 
     response = logged_in_client.post(
-        '/admin/siswa/import',
-        data={'file': (buf, 'import.xlsx')},
-        content_type='multipart/form-data',
+        "/admin/siswa/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
     )
     assert response.status_code == 200
-    assert b'diperbarui' in response.data
+    assert b"diperbarui" in response.data
 
     with app.app_context():
         s = Student.query.filter_by(student_id="1001").first()
@@ -370,8 +413,9 @@ def test_siswa_import_update_mode(logged_in_client, app):
 
 
 def test_siswa_import_default_password_is_nis(logged_in_client, app):
-    from app.models import Student
     from werkzeug.security import check_password_hash
+
+    from app.models import Student
 
     with app.app_context():
         cg_id = _create_class_group()
@@ -386,12 +430,12 @@ def test_siswa_import_default_password_is_nis(logged_in_client, app):
         )
 
     response = logged_in_client.post(
-        '/admin/siswa/import',
-        data={'file': (buf, 'import.xlsx')},
-        content_type='multipart/form-data',
+        "/admin/siswa/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
     )
     assert response.status_code == 200
-    assert b'ditambahkan' in response.data
+    assert b"ditambahkan" in response.data
 
     with app.app_context():
         s = Student.query.filter_by(student_id="2001").first()
@@ -414,12 +458,12 @@ def test_siswa_import_abort_invalid_rombel(logged_in_client, app):
         )
 
     response = logged_in_client.post(
-        '/admin/siswa/import',
-        data={'file': (buf, 'import.xlsx')},
-        content_type='multipart/form-data',
+        "/admin/siswa/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
     )
     assert response.status_code == 200
-    assert b'tidak valid' in response.data
+    assert b"tidak valid" in response.data
 
 
 def test_siswa_import_abort_missing_nis(logged_in_client, app):
@@ -437,12 +481,12 @@ def test_siswa_import_abort_missing_nis(logged_in_client, app):
         )
 
     response = logged_in_client.post(
-        '/admin/siswa/import',
-        data={'file': (buf, 'import.xlsx')},
-        content_type='multipart/form-data',
+        "/admin/siswa/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
     )
     assert response.status_code == 200
-    assert b'NIS wajib' in response.data
+    assert b"NIS wajib" in response.data
 
 
 def test_siswa_import_abort_missing_nama(logged_in_client, app):
@@ -460,12 +504,12 @@ def test_siswa_import_abort_missing_nama(logged_in_client, app):
         )
 
     response = logged_in_client.post(
-        '/admin/siswa/import',
-        data={'file': (buf, 'import.xlsx')},
-        content_type='multipart/form-data',
+        "/admin/siswa/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
     )
     assert response.status_code == 200
-    assert b'Nama wajib' in response.data
+    assert b"Nama wajib" in response.data
 
 
 def test_siswa_import_abort_invalid_rombel_in_reference(logged_in_client, app):
@@ -480,12 +524,12 @@ def test_siswa_import_abort_invalid_rombel_in_reference(logged_in_client, app):
         )
 
     response = logged_in_client.post(
-        '/admin/siswa/import',
-        data={'file': (buf, 'import.xlsx')},
-        content_type='multipart/form-data',
+        "/admin/siswa/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
     )
     assert response.status_code == 200
-    assert b'Rombel id tidak valid' in response.data
+    assert b"Rombel id tidak valid" in response.data
 
 
 def test_siswa_import_zero_jumlah(logged_in_client, app):
@@ -494,113 +538,121 @@ def test_siswa_import_zero_jumlah(logged_in_client, app):
         buf = _build_xlsx(mode="skip", jumlah_siswa=0, rombel_info=[])
 
     response = logged_in_client.post(
-        '/admin/siswa/import',
-        data={'file': (buf, 'import.xlsx')},
-        content_type='multipart/form-data',
+        "/admin/siswa/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
     )
     assert response.status_code == 200
-    assert b'harus lebih dari 0' in response.data
+    assert b"harus lebih dari 0" in response.data
 
 
 # ---- Rombel (ClassGroup) CRUD tests ----
 
 
 def test_rombel_list_redirects_anonymous(client):
-    response = client.get('/admin/rombel')
+    response = client.get("/admin/rombel")
     assert response.status_code == 302
-    assert 'login' in response.location
+    assert "login" in response.location
 
 
 def test_rombel_list_returns_200(logged_in_client):
-    response = logged_in_client.get('/admin/rombel')
+    response = logged_in_client.get("/admin/rombel")
     assert response.status_code == 200
-    assert b'Data Rombel' in response.data
+    assert b"Data Rombel" in response.data
 
 
 def test_rombel_data_returns_json(logged_in_client):
-    response = logged_in_client.get('/admin/rombel/data')
+    response = logged_in_client.get("/admin/rombel/data")
     assert response.status_code == 200
     data = response.get_json()
-    assert 'data' in data
+    assert "data" in data
 
 
 def test_rombel_data_includes_groups(logged_in_client, app):
     with app.app_context():
-        _create_class_group(name='1', grade_level='X', major='TJKT')
-        _create_class_group(name='2', grade_level='XI', major='TJKT')
+        _create_class_group(name="1", grade_level="X", major="TJKT")
+        _create_class_group(name="2", grade_level="XI", major="TJKT")
 
-    response = logged_in_client.get('/admin/rombel/data')
+    response = logged_in_client.get("/admin/rombel/data")
     assert response.status_code == 200
     data = response.get_json()
-    assert len(data['data']) == 2
+    assert len(data["data"]) == 2
 
 
 def test_rombel_tambah_page_get(logged_in_client):
-    response = logged_in_client.get('/admin/rombel/tambah')
+    response = logged_in_client.get("/admin/rombel/tambah")
     assert response.status_code == 200
-    assert b'Tambah Rombel' in response.data
+    assert b"Tambah Rombel" in response.data
 
 
 def test_rombel_tambah_success(logged_in_client, app):
-    response = logged_in_client.post('/admin/rombel/tambah', data={
-        'grade_level': 'X',
-        'major': 'TJKT',
-        'name': '5',
-        'homeroom_teacher_id': '',
-    })
+    response = logged_in_client.post(
+        "/admin/rombel/tambah",
+        data={
+            "grade_level": "X",
+            "major": "TJKT",
+            "name": "5",
+            "homeroom_teacher_id": "",
+        },
+    )
     assert response.status_code == 200
-    assert b'berhasil ditambahkan' in response.data
+    assert b"berhasil ditambahkan" in response.data
 
     with app.app_context():
         from app.models import ClassGroup
-        cg = ClassGroup.query.filter_by(name='5', grade_level='X').first()
+
+        cg = ClassGroup.query.filter_by(name="5", grade_level="X").first()
         assert cg is not None
 
 
 def test_rombel_tambah_regular_admin_blocked(regular_admin_client):
-    response = regular_admin_client.get('/admin/rombel/tambah')
+    response = regular_admin_client.get("/admin/rombel/tambah")
     assert response.status_code == 302
-    assert response.location == '/admin/'
+    assert response.location == "/admin/"
 
 
 def test_rombel_tambah_anonymous_redirect(client):
-    response = client.get('/admin/rombel/tambah')
+    response = client.get("/admin/rombel/tambah")
     assert response.status_code == 302
-    assert 'login' in response.location
+    assert "login" in response.location
 
 
 def test_rombel_edit_page_get(logged_in_client, app):
     with app.app_context():
         cg_id = _create_class_group()
 
-    response = logged_in_client.get('/admin/rombel/edit/{}'.format(cg_id))
+    response = logged_in_client.get("/admin/rombel/edit/{}".format(cg_id))
     assert response.status_code == 200
-    assert b'Edit Rombel' in response.data
+    assert b"Edit Rombel" in response.data
 
 
 def test_rombel_edit_success(logged_in_client, app):
     with app.app_context():
-        cg_id = _create_class_group(name='1', grade_level='X', major='TJKT')
+        cg_id = _create_class_group(name="1", grade_level="X", major="TJKT")
 
-    response = logged_in_client.post('/admin/rombel/edit/{}'.format(cg_id), data={
-        'grade_level': 'XI',
-        'major': '',
-        'name': '2',
-        'homeroom_teacher_id': '',
-    })
+    response = logged_in_client.post(
+        "/admin/rombel/edit/{}".format(cg_id),
+        data={
+            "grade_level": "XI",
+            "major": "",
+            "name": "2",
+            "homeroom_teacher_id": "",
+        },
+    )
     assert response.status_code == 200
-    assert b'berhasil diperbarui' in response.data
+    assert b"berhasil diperbarui" in response.data
 
     with app.app_context():
         from app.models import ClassGroup
+
         cg = db.session.get(ClassGroup, cg_id)
-        assert cg.grade_level == 'XI'
-        assert cg.name == '2'
+        assert cg.grade_level == "XI"
+        assert cg.name == "2"
         assert cg.major is None
 
 
 def test_rombel_edit_404(logged_in_client):
-    response = logged_in_client.get('/admin/rombel/edit/9999')
+    response = logged_in_client.get("/admin/rombel/edit/9999")
     assert response.status_code == 404
 
 
@@ -608,36 +660,39 @@ def test_rombel_hapus_success(logged_in_client, app):
     with app.app_context():
         cg_id = _create_class_group()
 
-    response = logged_in_client.post('/admin/rombel/hapus', data={'id': cg_id})
+    response = logged_in_client.post("/admin/rombel/hapus", data={"id": cg_id})
     assert response.status_code == 200
-    assert b'berhasil dihapus' in response.data
+    assert b"berhasil dihapus" in response.data
 
     with app.app_context():
         from app.models import ClassGroup
+
         assert db.session.get(ClassGroup, cg_id) is None
 
 
 def test_rombel_hapus_with_active_students_blocked(logged_in_client, app):
     from werkzeug.security import generate_password_hash
+
     with app.app_context():
         cg_id = _create_class_group()
         from app.models import Student
+
         s = Student(
-            student_id='S700',
-            name='Aktif',
-            password=generate_password_hash('p'),
+            student_id="S700",
+            name="Aktif",
+            password=generate_password_hash("p"),
             class_group_id=cg_id,
         )
         db.session.add(s)
         db.session.commit()
 
-    response = logged_in_client.post('/admin/rombel/hapus', data={'id': cg_id})
+    response = logged_in_client.post("/admin/rombel/hapus", data={"id": cg_id})
     assert response.status_code == 200
-    assert b'tidak dapat dihapus' in response.data
+    assert b"tidak dapat dihapus" in response.data
 
 
 def test_rombel_hapus_404(logged_in_client):
-    response = logged_in_client.post('/admin/rombel/hapus', data={'id': 9999})
+    response = logged_in_client.post("/admin/rombel/hapus", data={"id": 9999})
     assert response.status_code == 404
 
 
@@ -645,209 +700,237 @@ def test_rombel_hapus_404(logged_in_client):
 
 
 def test_siswa_list_redirects_anonymous(client):
-    response = client.get('/admin/siswa')
+    response = client.get("/admin/siswa")
     assert response.status_code == 302
-    assert 'login' in response.location
+    assert "login" in response.location
 
 
 def test_siswa_list_returns_200(logged_in_client):
-    response = logged_in_client.get('/admin/siswa')
+    response = logged_in_client.get("/admin/siswa")
     assert response.status_code == 200
-    assert b'Data Siswa' in response.data
+    assert b"Data Siswa" in response.data
 
 
 def test_siswa_data_returns_json(logged_in_client):
-    response = logged_in_client.get('/admin/siswa/data')
+    response = logged_in_client.get("/admin/siswa/data")
     assert response.status_code == 200
     data = response.get_json()
-    assert 'data' in data
+    assert "data" in data
 
 
 def test_siswa_tambah_page_get(logged_in_client, app):
     with app.app_context():
         _create_class_group()
 
-    response = logged_in_client.get('/admin/siswa/tambah')
+    response = logged_in_client.get("/admin/siswa/tambah")
     assert response.status_code == 200
-    assert b'Tambah Siswa' in response.data
+    assert b"Tambah Siswa" in response.data
 
 
 def test_siswa_tambah_success(logged_in_client, app):
     with app.app_context():
         cg_id = _create_class_group()
 
-    response = logged_in_client.post('/admin/siswa/tambah', data={
-        'student_id': 'S100',
-        'name': 'Budi',
-        'password': 'pass123',
-        'class_group_id': str(cg_id),
-        'admin_note': '',
-    })
+    response = logged_in_client.post(
+        "/admin/siswa/tambah",
+        data={
+            "student_id": "S100",
+            "name": "Budi",
+            "password": "pass123",
+            "class_group_id": str(cg_id),
+            "admin_note": "",
+        },
+    )
     assert response.status_code == 200
-    assert b'berhasil ditambahkan' in response.data
+    assert b"berhasil ditambahkan" in response.data
 
     with app.app_context():
         from app.models import Student
-        s = Student.query.filter_by(student_id='S100').first()
+
+        s = Student.query.filter_by(student_id="S100").first()
         assert s is not None
-        assert s.name == 'Budi'
+        assert s.name == "Budi"
 
 
 def test_siswa_tambah_duplicate_nis(logged_in_client, app):
     from werkzeug.security import generate_password_hash
+
     with app.app_context():
         cg_id = _create_class_group()
         from app.models import Student
+
         existing = Student(
-            student_id='S100',
-            name='Lama',
-            password=generate_password_hash('p'),
+            student_id="S100",
+            name="Lama",
+            password=generate_password_hash("p"),
             class_group_id=cg_id,
         )
         db.session.add(existing)
         db.session.commit()
 
-    response = logged_in_client.post('/admin/siswa/tambah', data={
-        'student_id': 'S100',
-        'name': 'Budi',
-        'password': 'pass123',
-        'class_group_id': str(cg_id),
-        'admin_note': '',
-    })
+    response = logged_in_client.post(
+        "/admin/siswa/tambah",
+        data={
+            "student_id": "S100",
+            "name": "Budi",
+            "password": "pass123",
+            "class_group_id": str(cg_id),
+            "admin_note": "",
+        },
+    )
     assert response.status_code == 200
-    assert b'NIS sudah terdaftar' in response.data
+    assert b"NIS sudah terdaftar" in response.data
 
 
 def test_siswa_tambah_no_password(logged_in_client, app):
     with app.app_context():
         cg_id = _create_class_group()
 
-    response = logged_in_client.post('/admin/siswa/tambah', data={
-        'student_id': 'S200',
-        'name': 'No Pass',
-        'password': '',
-        'class_group_id': str(cg_id),
-        'admin_note': '',
-    })
+    response = logged_in_client.post(
+        "/admin/siswa/tambah",
+        data={
+            "student_id": "S200",
+            "name": "No Pass",
+            "password": "",
+            "class_group_id": str(cg_id),
+            "admin_note": "",
+        },
+    )
     assert response.status_code == 200
-    assert b'Password wajib diisi' in response.data
+    assert b"Password wajib diisi" in response.data
 
 
 def test_siswa_tambah_regular_admin_blocked(regular_admin_client):
-    response = regular_admin_client.get('/admin/siswa/tambah')
+    response = regular_admin_client.get("/admin/siswa/tambah")
     assert response.status_code == 302
-    assert response.location == '/admin/'
+    assert response.location == "/admin/"
 
 
 def test_siswa_edit_page_get(logged_in_client, app):
     from werkzeug.security import generate_password_hash
+
     with app.app_context():
         cg_id = _create_class_group()
         from app.models import Student
+
         s = Student(
-            student_id='S300',
-            name='Edit',
-            password=generate_password_hash('p'),
+            student_id="S300",
+            name="Edit",
+            password=generate_password_hash("p"),
             class_group_id=cg_id,
         )
         db.session.add(s)
         db.session.commit()
         s_id = s.id
 
-    response = logged_in_client.get('/admin/siswa/edit/{}'.format(s_id))
+    response = logged_in_client.get("/admin/siswa/edit/{}".format(s_id))
     assert response.status_code == 200
-    assert b'Edit Siswa' in response.data
+    assert b"Edit Siswa" in response.data
 
 
 def test_siswa_edit_success(logged_in_client, app):
     from werkzeug.security import generate_password_hash
+
     with app.app_context():
         cg_id = _create_class_group()
         from app.models import Student
+
         s = Student(
-            student_id='S400',
-            name='Lama',
-            password=generate_password_hash('p'),
+            student_id="S400",
+            name="Lama",
+            password=generate_password_hash("p"),
             class_group_id=cg_id,
         )
         db.session.add(s)
         db.session.commit()
         s_id = s.id
 
-    response = logged_in_client.post('/admin/siswa/edit/{}'.format(s_id), data={
-        'student_id': 'S401',
-        'name': 'Baru',
-        'password': '',
-        'class_group_id': str(cg_id),
-        'admin_note': 'catatan',
-    })
+    response = logged_in_client.post(
+        "/admin/siswa/edit/{}".format(s_id),
+        data={
+            "student_id": "S401",
+            "name": "Baru",
+            "password": "",
+            "class_group_id": str(cg_id),
+            "admin_note": "catatan",
+        },
+    )
     assert response.status_code == 200
-    assert b'berhasil diperbarui' in response.data
+    assert b"berhasil diperbarui" in response.data
 
     with app.app_context():
         from app.models import Student
+
         s = db.session.get(Student, s_id)
-        assert s.name == 'Baru'
-        assert s.student_id == 'S401'
+        assert s.name == "Baru"
+        assert s.student_id == "S401"
 
 
 def test_siswa_edit_duplicate_nis(logged_in_client, app):
     from werkzeug.security import generate_password_hash
+
     with app.app_context():
         cg_id = _create_class_group()
         from app.models import Student
+
         s1 = Student(
-            student_id='S500',
-            name='A',
-            password=generate_password_hash('p'),
+            student_id="S500",
+            name="A",
+            password=generate_password_hash("p"),
             class_group_id=cg_id,
         )
         s2 = Student(
-            student_id='S501',
-            name='B',
-            password=generate_password_hash('p'),
+            student_id="S501",
+            name="B",
+            password=generate_password_hash("p"),
             class_group_id=cg_id,
         )
         db.session.add_all([s1, s2])
         db.session.commit()
         s2_id = s2.id
 
-    response = logged_in_client.post('/admin/siswa/edit/{}'.format(s2_id), data={
-        'student_id': 'S500',
-        'name': 'B',
-        'password': '',
-        'class_group_id': str(cg_id),
-        'admin_note': '',
-    })
+    response = logged_in_client.post(
+        "/admin/siswa/edit/{}".format(s2_id),
+        data={
+            "student_id": "S500",
+            "name": "B",
+            "password": "",
+            "class_group_id": str(cg_id),
+            "admin_note": "",
+        },
+    )
     assert response.status_code == 200
-    assert b'sudah digunakan' in response.data
+    assert b"sudah digunakan" in response.data
 
 
 def test_siswa_hapus_success(logged_in_client, app):
     from werkzeug.security import generate_password_hash
+
     with app.app_context():
         cg_id = _create_class_group()
         from app.models import Student
+
         s = Student(
-            student_id='S600',
-            name='Hapus',
-            password=generate_password_hash('p'),
+            student_id="S600",
+            name="Hapus",
+            password=generate_password_hash("p"),
             class_group_id=cg_id,
         )
         db.session.add(s)
         db.session.commit()
         s_id = s.id
 
-    response = logged_in_client.post('/admin/siswa/hapus', data={'id': s_id})
+    response = logged_in_client.post("/admin/siswa/hapus", data={"id": s_id})
     assert response.status_code == 200
-    assert b'berhasil dihapus' in response.data
+    assert b"berhasil dihapus" in response.data
 
     with app.app_context():
         from app.models import Student
+
         s = db.session.get(Student, s_id)
         assert s.is_deleted is True
 
 
 def test_siswa_hapus_404(logged_in_client):
-    response = logged_in_client.post('/admin/siswa/hapus', data={'id': 9999})
+    response = logged_in_client.post("/admin/siswa/hapus", data={"id": 9999})
     assert response.status_code == 404
