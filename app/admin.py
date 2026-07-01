@@ -147,10 +147,14 @@ def rombel_edit(id):
         for a in Teacher.query.order_by(Teacher.username).all()
     ]
     if request.method == "GET":
-        return hx_render("admin/rombel_form.jinja", class_group=class_group, form=form)
+        return hx_render(
+            "admin/rombel_form.jinja", class_group=class_group, form=form
+        )
 
     if not form.validate_on_submit():
-        return hx_render("admin/rombel_form.jinja", class_group=class_group, form=form)
+        return hx_render(
+            "admin/rombel_form.jinja", class_group=class_group, form=form
+        )
 
     notif = {}
     class_group.name = sanitize(form.name.data)
@@ -172,7 +176,9 @@ def rombel_hapus():
         class_group_id=id, is_deleted=False
     ).first()
     if active_students:
-        notif["error"] = "Rombel tidak dapat dihapus karena masih memiliki siswa aktif"
+        notif["error"] = (
+            "Rombel tidak dapat dihapus karena masih memiliki siswa aktif"
+        )
     else:
         db.session.delete(class_group)
         db.session.commit()
@@ -463,8 +469,14 @@ def siswa_import():
             try:
                 rombel_map[int(cg_id)] = ws.cell(row=row, column=8).value
             except (ValueError, TypeError):
-                notif["error"] = "Rombel id tidak valid pada baris {}: '{}'".format(row, cg_id)
-                return hx_render("admin/siswa.jinja", push_url="admin.siswa", **notif)
+                notif["error"] = (
+                    "Rombel id tidak valid pada baris {}: '{}'".format(
+                        row, cg_id
+                    )
+                )
+                return hx_render(
+                    "admin/siswa.jinja", push_url="admin.siswa", **notif
+                )
         row += 1
 
     valid_cg_ids = {cg.id for cg in ClassGroup.query.all()}
@@ -488,14 +500,18 @@ def siswa_import():
     header_row = 4
     expected_headers = ["NIS", "Nama", "Password", "Rombel", "Catatan Admin"]
     for col_idx, header in enumerate(expected_headers, start=1):
-        cell_val = str(ws.cell(row=header_row, column=col_idx).value or "").strip()
+        cell_val = str(
+            ws.cell(row=header_row, column=col_idx).value or ""
+        ).strip()
         if cell_val != header:
             notif["error"] = (
                 "Header kolom {} tidak valid: '{}' (seharusnya '{}')".format(
                     col_idx, cell_val, header
                 )
             )
-            return hx_render("admin/siswa.jinja", push_url="admin.siswa", **notif)
+            return hx_render(
+                "admin/siswa.jinja", push_url="admin.siswa", **notif
+            )
 
     data_start = header_row + 1
     rows = []
@@ -515,7 +531,9 @@ def siswa_import():
         catatan = str(catatan).strip() if catatan is not None else ""
 
         try:
-            rombel_id = int(rombel_id_raw) if rombel_id_raw is not None else None
+            rombel_id = (
+                int(rombel_id_raw) if rombel_id_raw is not None else None
+            )
         except (ValueError, TypeError):
             validation_errors.append(
                 "Baris {}: Rombel id '{}' tidak valid".format(r, rombel_id_raw)
@@ -543,7 +561,9 @@ def siswa_import():
         )
 
     if validation_errors:
-        notif["error"] = "Validasi gagal:<br>- " + "<br>- ".join(validation_errors)
+        notif["error"] = "Validasi gagal:<br>- " + "<br>- ".join(
+            validation_errors
+        )
         return hx_render("admin/siswa.jinja", push_url="admin.siswa", **notif)
 
     imported = 0
@@ -558,7 +578,9 @@ def siswa_import():
                 existing.name = sanitize(row_data["nama"])
                 if row_data["password"]:
                     existing.password = generate_password_hash(
-                        row_data["password"], method="pbkdf2:sha256", salt_length=16
+                        row_data["password"],
+                        method="pbkdf2:sha256",
+                        salt_length=16,
                     )
                 existing.class_group_id = row_data["rombel_id"]
                 existing.admin_note = sanitize(row_data["catatan"]) or None
@@ -681,7 +703,9 @@ def guru_edit(id):
     ).first()
     if existing:
         notif["error"] = "Username sudah digunakan guru lain"
-        return hx_render("admin/guru_form.jinja", guru=admin, form=form, **notif)
+        return hx_render(
+            "admin/guru_form.jinja", guru=admin, form=form, **notif
+        )
 
     admin.username = sanitize(form.username.data)
     admin.name = sanitize(form.name.data)
@@ -736,7 +760,9 @@ def kategori_data():
         .order_by(Category.id)
         .all()
     )
-    teacher_ids = {link.teacher_id for cat in categories for link in cat.teacher_links}
+    teacher_ids = {
+        link.teacher_id for cat in categories for link in cat.teacher_links
+    }
     teacher_map = {}
     if teacher_ids:
         for t in Teacher.query.filter(Teacher.id.in_(teacher_ids)).all():
@@ -784,13 +810,17 @@ def kategori_tambah():
     existing = Category.query.filter_by(name=form.name.data).first()
     if existing:
         notif["error"] = "Nama kategori sudah digunakan"
-        return hx_render("admin/kategori_form.jinja", category=None, form=form, **notif)
+        return hx_render(
+            "admin/kategori_form.jinja", category=None, form=form, **notif
+        )
 
     category = Category(name=sanitize(form.name.data))
     db.session.add(category)
     db.session.flush()
     for teacher_id in form.teachers.data:
-        db.session.add(CategoryTeacher(category_id=category.id, teacher_id=teacher_id))
+        db.session.add(
+            CategoryTeacher(category_id=category.id, teacher_id=teacher_id)
+        )
     db.session.commit()
     notif["success"] = "Kategori berhasil ditambahkan"
     return hx_render("admin/kategori.jinja", push_url="admin.kategori", **notif)
@@ -803,11 +833,17 @@ def kategori_edit(id):
     form = KategoriForm(obj=category)
     _populate_kategori_teacher_choices(form)
     if request.method == "GET":
-        form.teachers.data = [link.teacher_id for link in category.teacher_links]
-        return hx_render("admin/kategori_form.jinja", category=category, form=form)
+        form.teachers.data = [
+            link.teacher_id for link in category.teacher_links
+        ]
+        return hx_render(
+            "admin/kategori_form.jinja", category=category, form=form
+        )
 
     if not form.validate_on_submit():
-        return hx_render("admin/kategori_form.jinja", category=category, form=form)
+        return hx_render(
+            "admin/kategori_form.jinja", category=category, form=form
+        )
 
     notif = {}
     existing = Category.query.filter(
@@ -888,7 +924,9 @@ def permintaan_data():
     )
 
     if not is_superadmin:
-        query = query.filter(BorrowingRequest.category_id.in_(teacher_category_ids))
+        query = query.filter(
+            BorrowingRequest.category_id.in_(teacher_category_ids)
+        )
 
     today = datetime.now(WIB).date()
     start_date = today - timedelta(days=7)
@@ -912,7 +950,9 @@ def permintaan_data():
     for i, req in enumerate(requests, 1):
         student = req.student
         cat_group = (
-            student.class_group.display_name if student and student.class_group else "-"
+            student.class_group.display_name
+            if student and student.class_group
+            else "-"
         )
         student_name = student.name if student else "-"
         student_nis = student.student_id if student else "-"
@@ -951,14 +991,18 @@ def permintaan_detail(id):
         BorrowingRequest,
         id,
         options=[
-            joinedload(BorrowingRequest.student).joinedload(Student.class_group),
+            joinedload(BorrowingRequest.student).joinedload(
+                Student.class_group
+            ),
             joinedload(BorrowingRequest.category),
             joinedload(BorrowingRequest.reviewer),
         ],
     )
     can_review = _teacher_can_review(teacher.id, req.category_id)
     category_teachers = (
-        Teacher.query.join(CategoryTeacher, CategoryTeacher.teacher_id == Teacher.id)
+        Teacher.query.join(
+            CategoryTeacher, CategoryTeacher.teacher_id == Teacher.id
+        )
         .filter(CategoryTeacher.category_id == req.category_id)
         .all()
     )

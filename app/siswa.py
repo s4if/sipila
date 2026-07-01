@@ -93,24 +93,32 @@ def permintaan_tambah():
     if request.method == "GET":
         return hx_render(
             "siswa/permintaan_form.jinja",
-            form=form, req=None,
-            min_date=min_date.isoformat(), max_date=max_date.isoformat(),
+            form=form,
+            req=None,
+            min_date=min_date.isoformat(),
+            max_date=max_date.isoformat(),
         )
 
     if not form.validate_on_submit():
         return hx_render(
             "siswa/permintaan_form.jinja",
-            form=form, req=None,
-            min_date=min_date.isoformat(), max_date=max_date.isoformat(),
+            form=form,
+            req=None,
+            min_date=min_date.isoformat(),
+            max_date=max_date.isoformat(),
         )
 
     notif = {}
     if form.date.data < min_date or form.date.data > max_date:
-        notif["error"] = "Tanggal harus dalam rentang hari ini sampai 7 hari ke depan"
+        notif["error"] = (
+            "Tanggal harus dalam rentang hari ini sampai 7 hari ke depan"
+        )
         return hx_render(
             "siswa/permintaan_form.jinja",
-            form=form, req=None,
-            min_date=min_date.isoformat(), max_date=max_date.isoformat(),
+            form=form,
+            req=None,
+            min_date=min_date.isoformat(),
+            max_date=max_date.isoformat(),
             **notif,
         )
 
@@ -119,11 +127,15 @@ def permintaan_tambah():
         student_id=student_db_id, date=form.date.data
     ).first()
     if existing:
-        notif["error"] = "Anda sudah mengajukan permintaan untuk tanggal tersebut"
+        notif["error"] = (
+            "Anda sudah mengajukan permintaan untuk tanggal tersebut"
+        )
         return hx_render(
             "siswa/permintaan_form.jinja",
-            form=form, req=None,
-            min_date=min_date.isoformat(), max_date=max_date.isoformat(),
+            form=form,
+            req=None,
+            min_date=min_date.isoformat(),
+            max_date=max_date.isoformat(),
             **notif,
         )
 
@@ -160,24 +172,32 @@ def permintaan_edit(id):
         form.student_note.data = req.student_note
         return hx_render(
             "siswa/permintaan_form.jinja",
-            form=form, req=req,
-            min_date=min_date.isoformat(), max_date=max_date.isoformat(),
+            form=form,
+            req=req,
+            min_date=min_date.isoformat(),
+            max_date=max_date.isoformat(),
         )
 
     if not form.validate_on_submit():
         return hx_render(
             "siswa/permintaan_form.jinja",
-            form=form, req=req,
-            min_date=min_date.isoformat(), max_date=max_date.isoformat(),
+            form=form,
+            req=req,
+            min_date=min_date.isoformat(),
+            max_date=max_date.isoformat(),
         )
 
     notif = {}
     if form.date.data < min_date or form.date.data > max_date:
-        notif["error"] = "Tanggal harus dalam rentang hari ini sampai 7 hari ke depan"
+        notif["error"] = (
+            "Tanggal harus dalam rentang hari ini sampai 7 hari ke depan"
+        )
         return hx_render(
             "siswa/permintaan_form.jinja",
-            form=form, req=req,
-            min_date=min_date.isoformat(), max_date=max_date.isoformat(),
+            form=form,
+            req=req,
+            min_date=min_date.isoformat(),
+            max_date=max_date.isoformat(),
             **notif,
         )
 
@@ -188,11 +208,15 @@ def permintaan_edit(id):
         BorrowingRequest.id != id,
     ).first()
     if existing:
-        notif["error"] = "Anda sudah mengajukan permintaan untuk tanggal tersebut"
+        notif["error"] = (
+            "Anda sudah mengajukan permintaan untuk tanggal tersebut"
+        )
         return hx_render(
             "siswa/permintaan_form.jinja",
-            form=form, req=req,
-            min_date=min_date.isoformat(), max_date=max_date.isoformat(),
+            form=form,
+            req=req,
+            min_date=min_date.isoformat(),
+            max_date=max_date.isoformat(),
             **notif,
         )
 
@@ -213,7 +237,9 @@ def permintaan_batal():
     if req.student_id != session["student_db_id"]:
         notif["error"] = "Anda tidak berwenang membatalkan permintaan ini"
     elif req.status != "pending":
-        notif["error"] = "Hanya permintaan berstatus pending yang dapat dibatalkan"
+        notif["error"] = (
+            "Hanya permintaan berstatus pending yang dapat dibatalkan"
+        )
     else:
         db.session.delete(req)
         db.session.commit()

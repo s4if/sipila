@@ -46,7 +46,9 @@ def login_siswa():
         siswa = Student.query.filter_by(
             student_id=request.form["student_id"], is_deleted=False
         ).first()
-        if siswa and check_password_hash(siswa.password, request.form["password"]):
+        if siswa and check_password_hash(
+            siswa.password, request.form["password"]
+        ):
             session["logged_in"] = True
             session["is_admin"] = False
             session["student_id"] = siswa.student_id
