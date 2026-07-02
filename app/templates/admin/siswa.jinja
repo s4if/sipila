@@ -125,6 +125,11 @@ var edit_siswa = (id) => {
     var url = raw_url.slice(0, -1) + String(id)
     htmx.ajax("GET", url, {target:'#hx_content', swap:'innerHTML'})
 };
+var detail_siswa = (id) => {
+    var raw_url = "{{url_for('admin.siswa_detail', id=0)}}"
+    var url = raw_url.slice(0, -1) + String(id)
+    htmx.ajax("GET", url, {target:'#hx_content', swap:'innerHTML'})
+};
 (function() {
     if ($.fn.DataTable.isDataTable('#siswaTable')) {
         $('#siswaTable').DataTable().destroy();

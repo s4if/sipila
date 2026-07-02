@@ -85,7 +85,7 @@
                     <span class="visually-hidden">Loading...</span>
                 </div>
             </div>
-            <div id="hx_content">
+            <div id="hx_content" hx-target="#hx_content" hx-swap="innerHTML">
                 {% block content %}{% endblock %}
             </div>
         </main>

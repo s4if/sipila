@@ -1,0 +1,204 @@
+{% if not is_htmx %}
+    {% extends "admin/layout.jinja" %}
+    {% block title %}Detail Siswa{% endblock %}
+{% else %}
+    <title>Detail Siswa</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h4 class="mb-0">Detail Siswa</h4>
+    <a class="btn btn-secondary"
+       href="{{ url_for('admin.siswa') }}"
+       hx-get="{{ url_for('admin.siswa') }}"
+       hx-target="#hx_content"
+       hx-swap="innerHTML">
+        <i class="bi bi-arrow-left"></i> Kembali
+    </a>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">Informasi Siswa</div>
+            <div class="card-body">
+                <table class="table table-borderless mb-0">
+                    <tr>
+                        <th class="ps-0" style="width:40%">NIS</th>
+                        <td>{{ student.student_id }}</td>
+                    </tr>
+                    <tr>
+                        <th class="ps-0">Nama</th>
+                        <td>{{ student.name }}</td>
+                    </tr>
+                    <tr>
+                        <th class="ps-0">Rombel</th>
+                        <td>{{ student.class_group.display_name if student.class_group else '-' }}</td>
+                    </tr>
+                    {% if student.admin_note %}
+                    <tr>
+                        <th class="ps-0">Catatan Admin</th>
+                        <td>{{ student.admin_note }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">Ringkasan Peminjaman</div>
+            <div class="card-body">
+                <div class="row text-center g-3">
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded-3 py-3">
+                            <div class="fs-4 fw-bold">{{ total_requests }}</div>
+                            <div class="text-muted small">Total</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded-3 py-3">
+                            <div class="fs-4 fw-bold text-warning">{{ pending_requests }}</div>
+                            <div class="text-muted small">Pending</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded-3 py-3">
+                            <div class="fs-4 fw-bold text-success">{{ accepted_requests }}</div>
+                            <div class="text-muted small">Diterima</div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="border rounded-3 py-3">
+                            <div class="fs-4 fw-bold text-danger">{{ rejected_requests }}</div>
+                            <div class="text-muted small">Ditolak</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h5 class="mb-3">Riwayat Permintaan Peminjaman</h5>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label for="start_date" class="form-label">Dari Tanggal</label>
+                <input type="date" id="start_date" class="form-control" value="{{ start_date }}"/>
+            </div>
+            <div class="col-md-3">
+                <label for="end_date" class="form-label">Sampai Tanggal</label>
+                <input type="date" id="end_date" class="form-control" value="{{ end_date }}"/>
+            </div>
+            <div class="col-md-auto">
+                <button type="button" class="btn btn-primary" onclick="terapkan_filter()">
+                    <i class="bi bi-funnel"></i> Terapkan
+                </button>
+                <button type="button" class="btn btn-outline-secondary" onclick="reset_filter()">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                </button>
+                <button type="button" class="btn btn-success" onclick="export_excel()">
+                    <i class="bi bi-file-earmark-excel"></i> Export Excel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table id="riwayatTable" class="table table-striped table-bordered">
+        <thead>
+            <tr>
+                <th>No</th>
+                <th>Tanggal</th>
+                <th>Kategori</th>
+                <th>Status</th>
+                <th>Waktu Pengajuan</th>
+                <th>Ditinjau Oleh</th>
+                <th>Waktu Peninjauan</th>
+                <th>Aksi</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<script>
+var build_data_url = function() {
+    var base = "{{ url_for('admin.siswa_detail_data', id=student.id) }}";
+    var params = new URLSearchParams();
+    var sd = document.getElementById('start_date').value;
+    var ed = document.getElementById('end_date').value;
+    if (sd) params.append('start_date', sd);
+    if (ed) params.append('end_date', ed);
+    var qs = params.toString();
+    return qs ? base + '?' + qs : base;
+};
+
+var build_export_url = function() {
+    var base = "{{ url_for('admin.siswa_detail_export', id=student.id) }}";
+    var params = new URLSearchParams();
+    var sd = document.getElementById('start_date').value;
+    var ed = document.getElementById('end_date').value;
+    if (sd) params.append('start_date', sd);
+    if (ed) params.append('end_date', ed);
+    var qs = params.toString();
+    return qs ? base + '?' + qs : base;
+};
+
+var riwayatTable;
+
+var terapkan_filter = function() {
+    riwayatTable.ajax.url(build_data_url()).load();
+    window.history.replaceState(null, '', build_data_url());
+};
+
+var reset_filter = function() {
+    document.getElementById('start_date').value = '';
+    document.getElementById('end_date').value = '';
+    terapkan_filter();
+};
+
+var export_excel = function() {
+    window.location.href = build_export_url();
+};
+
+var detail_permintaan = function(id) {
+    var raw_url = "{{ url_for('admin.permintaan_detail', id=0) }}";
+    var url = raw_url.slice(0, -1) + String(id);
+    htmx.ajax("GET", url, {target: '#hx_content', swap: 'innerHTML'});
+};
+
+(function() {
+    if ($.fn.DataTable.isDataTable('#riwayatTable')) {
+        $('#riwayatTable').DataTable().destroy();
+        $('#riwayatTable').empty();
+    }
+    riwayatTable = $('#riwayatTable').DataTable({
+        ajax: {
+            url: build_data_url(),
+            dataSrc: 'data'
+        },
+        columns: [
+            { data: 'no' },
+            { data: 'date' },
+            { data: 'category' },
+            { data: 'status' },
+            { data: 'created_at' },
+            { data: 'reviewer' },
+            { data: 'reviewed_at' },
+            { data: 'actions', orderable: false, searchable: false }
+        ]
+    });
+})();
+</script>
+
+{% endblock %}
