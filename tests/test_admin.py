@@ -934,3 +934,166 @@ def test_siswa_hapus_success(logged_in_client, app):
 def test_siswa_hapus_404(logged_in_client):
     response = logged_in_client.post("/admin/siswa/hapus", data={"id": 9999})
     assert response.status_code == 404
+
+
+# ---- Siswa detail (riwayat peminjaman) tests ----
+
+
+def _make_student_with_requests(app, dates_statuses):
+    from datetime import datetime
+
+    from werkzeug.security import generate_password_hash
+
+    from app.models import (
+        BorrowingRequest,
+        Category,
+        ClassGroup,
+        Student,
+    )
+
+    with app.app_context():
+        cg = ClassGroup(name="1", grade_level="X", major="TJKT")
+        db.session.add(cg)
+        db.session.flush()
+
+        student = Student(
+            student_id="S900",
+            name="Siswa Riwayat",
+            password=generate_password_hash("p"),
+            class_group_id=cg.id,
+        )
+        db.session.add(student)
+        db.session.flush()
+
+        cat = Category(name="Laptop")
+        db.session.add(cat)
+        db.session.flush()
+
+        for date_str, status in dates_statuses:
+            req = BorrowingRequest(
+                student_id=student.id,
+                category_id=cat.id,
+                date=datetime.strptime(date_str, "%Y-%m-%d").date(),
+                status=status,
+            )
+            db.session.add(req)
+
+        db.session.commit()
+        return student.id
+
+
+def test_siswa_detail_redirects_anonymous(client, siswa_user):
+    response = client.get("/admin/siswa/{}".format(siswa_user.id))
+    assert response.status_code == 302
+    assert "login" in response.location
+
+
+def test_siswa_detail_returns_200(logged_in_client, siswa_user):
+    response = logged_in_client.get(
+        "/admin/siswa/{}".format(siswa_user.id)
+    )
+    assert response.status_code == 200
+    assert b"Riwayat Permintaan Peminjaman" in response.data
+    assert siswa_user.name.encode() in response.data
+
+
+def test_siswa_detail_404(logged_in_client):
+    response = logged_in_client.get("/admin/siswa/9999")
+    assert response.status_code == 404
+
+
+def test_siswa_detail_data_returns_json(logged_in_client, app):
+    student_id = _make_student_with_requests(
+        app, [("2025-01-10", "accepted"), ("2025-02-10", "pending")]
+    )
+    response = logged_in_client.get(
+        "/admin/siswa/{}/data".format(student_id)
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "data" in data
+    assert len(data["data"]) == 2
+
+
+def test_siswa_detail_data_date_filter(logged_in_client, app):
+    student_id = _make_student_with_requests(
+        app,
+        [("2025-01-10", "accepted"), ("2025-02-10", "pending"),
+         ("2025-03-10", "rejected")],
+    )
+    response = logged_in_client.get(
+        "/admin/siswa/{}/data".format(student_id),
+        query_string={"start_date": "2025-02-01", "end_date": "2025-02-28"},
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert len(data["data"]) == 1
+    assert data["data"][0]["date"] == "10/02/2025"
+
+
+def test_siswa_detail_data_invalid_date_ignored(logged_in_client, app):
+    student_id = _make_student_with_requests(
+        app, [("2025-01-10", "accepted")]
+    )
+    response = logged_in_client.get(
+        "/admin/siswa/{}/data".format(student_id),
+        query_string={"start_date": "bukan-tanggal"},
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert len(data["data"]) == 1
+
+
+def test_siswa_detail_export_returns_xlsx(logged_in_client, app):
+    student_id = _make_student_with_requests(
+        app, [("2025-01-10", "accepted")]
+    )
+    response = logged_in_client.get(
+        "/admin/siswa/{}/export".format(student_id)
+    )
+    assert response.status_code == 200
+    assert response.content_type == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert b"PK" in response.data
+
+
+def test_siswa_detail_export_date_filter(logged_in_client, app):
+    student_id = _make_student_with_requests(
+        app,
+        [("2025-01-10", "accepted"), ("2025-02-10", "pending")],
+    )
+    response = logged_in_client.get(
+        "/admin/siswa/{}/export".format(student_id),
+        query_string={"start_date": "2025-02-01", "end_date": "2025-02-28"},
+    )
+    assert response.status_code == 200
+    import openpyxl
+    from io import BytesIO
+
+    wb = openpyxl.load_workbook(BytesIO(response.data))
+    ws = wb.active
+    # header at row 6, data at row 7 -> only one filtered request
+    assert ws.cell(row=7, column=2).value == "10/02/2025"
+    assert ws.cell(row=8, column=2).value is None
+
+
+def test_siswa_detail_export_404(logged_in_client):
+    response = logged_in_client.get("/admin/siswa/9999/export")
+    assert response.status_code == 404
+
+
+def test_siswa_detail_regular_admin_category_filter(
+    regular_admin_client, app, regular_admin
+):
+    # siswa has requests in a category the regular admin does NOT manage
+    student_id = _make_student_with_requests(
+        app, [("2025-01-10", "accepted")]
+    )
+    response = regular_admin_client.get(
+        "/admin/siswa/{}/data".format(student_id)
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    # regular admin manages no categories -> sees no requests
+    assert len(data["data"]) == 0

@@ -209,6 +209,23 @@ def siswa_data():
     is_superadmin = session.get("is_superadmin", False)
     data = []
     for i, student in enumerate(students, 1):
+        detail_btn = (
+            '<a class="btn btn-sm btn-info text-white" '
+            f'onclick="detail_siswa({student.id})">'
+            '<i class="bi bi-eye"></i> Detail</a>'
+        )
+        if is_superadmin:
+            actions = (
+                detail_btn
+                + ' <a class="btn btn-sm btn-warning" '
+                f'onclick="edit_siswa({student.id})">'
+                '<i class="bi bi-pencil"></i> Edit</a> '
+                '<button type="button" class="btn btn-sm btn-danger" '
+                f"onclick=\"hapus_siswa({student.id}, '{sanitize(student.name)}')\">"
+                '<i class="bi bi-trash"></i> Hapus</button>'
+            )
+        else:
+            actions = detail_btn
         data.append(
             {
                 "no": i,
@@ -218,16 +235,7 @@ def siswa_data():
                 if student.class_group
                 else "-",
                 "admin_note": student.admin_note or "",
-                "actions": (
-                    '<a class="btn btn-sm btn-warning" '
-                    f'onclick="edit_siswa({student.id})">'
-                    '<i class="bi bi-pencil"></i> Edit</a> '
-                    '<button type="button" class="btn btn-sm btn-danger" '
-                    f"onclick=\"hapus_siswa({student.id}, '{sanitize(student.name)}')\">"
-                    '<i class="bi bi-trash"></i> Hapus</button>'
-                )
-                if is_superadmin
-                else "-",
+                "actions": actions,
             }
         )
     return jsonify(data=data)
@@ -613,6 +621,242 @@ def siswa_import():
     notif["success"] = "Import selesai: {}".format(", ".join(parts))
 
     return hx_render("admin/siswa.jinja", push_url="admin.siswa", **notif)
+
+
+# ---- Siswa detail (riwayat peminjaman) ----
+
+
+def _parse_date_param(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def _siswa_requests_query(student_id, start_date=None, end_date=None):
+    from sqlalchemy.orm import joinedload
+
+    query = (
+        BorrowingRequest.query.filter_by(student_id=student_id)
+        .options(
+            joinedload(BorrowingRequest.category),
+            joinedload(BorrowingRequest.reviewer),
+        )
+    )
+    if start_date:
+        query = query.filter(BorrowingRequest.date >= start_date)
+    if end_date:
+        query = query.filter(BorrowingRequest.date <= end_date)
+
+    if not session.get("is_superadmin", False):
+        teacher = _get_current_teacher()
+        category_ids = _get_teacher_category_ids(teacher.id)
+        query = query.filter(BorrowingRequest.category_id.in_(category_ids))
+
+    return query.order_by(
+        BorrowingRequest.date.desc(), BorrowingRequest.id.desc()
+    )
+
+
+@bp.route("/siswa/<int:id>")
+@admin_required
+def siswa_detail(id):
+    from sqlalchemy.orm import joinedload
+
+    student = db.get_or_404(
+        Student, id, options=[joinedload(Student.class_group)]
+    )
+
+    base_query = BorrowingRequest.query.filter_by(student_id=id)
+    total = base_query.count()
+    accepted = base_query.filter_by(status="accepted").count()
+    rejected = base_query.filter_by(status="rejected").count()
+    pending = base_query.filter_by(status="pending").count()
+
+    return hx_render(
+        "admin/siswa_detail.jinja",
+        student=student,
+        total_requests=total,
+        accepted_requests=accepted,
+        rejected_requests=rejected,
+        pending_requests=pending,
+        start_date=request.args.get("start_date", ""),
+        end_date=request.args.get("end_date", ""),
+        push_url=url_for("admin.siswa_detail", id=id),
+    )
+
+
+@bp.route("/siswa/<int:id>/data")
+@admin_required
+def siswa_detail_data(id):
+    db.get_or_404(Student, id)
+    start_date = _parse_date_param(request.args.get("start_date"))
+    end_date = _parse_date_param(request.args.get("end_date"))
+
+    requests = _siswa_requests_query(id, start_date, end_date).all()
+
+    status_badges = {
+        "pending": '<span class="badge bg-warning text-dark">Pending</span>',
+        "accepted": '<span class="badge bg-success">Diterima</span>',
+        "rejected": '<span class="badge bg-danger">Ditolak</span>',
+        "expired": '<span class="badge bg-secondary">Kadaluarsa</span>',
+    }
+    now = datetime.now(WIB)
+    data = []
+    for i, req in enumerate(requests, 1):
+        status = "expired" if _is_kadaluarsa(req, now) else req.status
+        data.append(
+            {
+                "no": i,
+                "date": req.date.strftime("%d/%m/%Y") if req.date else "-",
+                "category": req.category.name if req.category else "-",
+                "status": status_badges.get(status, status),
+                "created_at": req.created_at.strftime("%d/%m/%Y %H:%M")
+                if req.created_at
+                else "-",
+                "reviewer": req.reviewer.name if req.reviewer else "-",
+                "reviewed_at": req.reviewed_at.strftime("%d/%m/%Y %H:%M")
+                if req.reviewed_at
+                else "-",
+                "actions": (
+                    '<a class="btn btn-sm btn-info text-white" '
+                    f'onclick="detail_permintaan({req.id})">'
+                    '<i class="bi bi-eye"></i> Detail</a>'
+                ),
+            }
+        )
+    return jsonify(data=data)
+
+
+@bp.route("/siswa/<int:id>/export")
+@admin_required
+def siswa_detail_export(id):
+    from io import BytesIO
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+
+    student = db.get_or_404(Student, id)
+    start_date = _parse_date_param(request.args.get("start_date"))
+    end_date = _parse_date_param(request.args.get("end_date"))
+    requests = _siswa_requests_query(id, start_date, end_date).all()
+
+    now = datetime.now(WIB)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Riwayat Peminjaman"
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(fill_type="solid", fgColor="4472C4")
+    label_font = Font(bold=True)
+
+    rombel = (
+        student.class_group.display_name if student.class_group else "-"
+    )
+
+    ws["A1"] = "NIS"
+    ws["A1"].font = label_font
+    ws["B1"] = student.student_id
+    ws["A2"] = "Nama"
+    ws["A2"].font = label_font
+    ws["B2"] = student.name
+    ws["A3"] = "Rombel"
+    ws["A3"].font = label_font
+    ws["B3"] = rombel
+
+    periode = "Semua"
+    if start_date or end_date:
+        periode = "{} s/d {}".format(
+            start_date.strftime("%d/%m/%Y") if start_date else "-",
+            end_date.strftime("%d/%m/%Y") if end_date else "-",
+        )
+    ws["A4"] = "Periode"
+    ws["A4"].font = label_font
+    ws["B4"] = periode
+
+    header_row = 6
+    headers = [
+        "No",
+        "Tanggal",
+        "Kategori",
+        "Status",
+        "Waktu Pengajuan",
+        "Ditinjau Oleh",
+        "Waktu Peninjauan",
+    ]
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+
+    for i, req in enumerate(requests, 1):
+        status = "expired" if _is_kadaluarsa(req, now) else req.status
+        if status == "expired":
+            status_text = "Kadaluarsa"
+        elif status == "accepted":
+            status_text = "Diterima"
+        elif status == "rejected":
+            status_text = "Ditolak"
+        else:
+            status_text = "Pending"
+
+        row = header_row + i
+        ws.cell(row=row, column=1, value=i)
+        ws.cell(
+            row=row,
+            column=2,
+            value=req.date.strftime("%d/%m/%Y") if req.date else "",
+        )
+        ws.cell(
+            row=row,
+            column=3,
+            value=req.category.name if req.category else "",
+        )
+        ws.cell(row=row, column=4, value=status_text)
+        ws.cell(
+            row=row,
+            column=5,
+            value=req.created_at.strftime("%d/%m/%Y %H:%M")
+            if req.created_at
+            else "",
+        )
+        ws.cell(
+            row=row,
+            column=6,
+            value=req.reviewer.name if req.reviewer else "",
+        )
+        ws.cell(
+            row=row,
+            column=7,
+            value=req.reviewed_at.strftime("%d/%m/%Y %H:%M")
+            if req.reviewed_at
+            else "",
+        )
+
+    widths = [6, 14, 24, 14, 20, 20, 20]
+    for col_idx, w in enumerate(widths, start=1):
+        ws.column_dimensions[
+            openpyxl.utils.get_column_letter(col_idx)
+        ].width = w
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    from flask import send_file
+
+    safe_name = (sanitize(student.name) or "siswa").replace(" ", "_")
+    download_name = "riwayat_peminjaman_{}.xlsx".format(safe_name)
+
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=download_name,
+    )
 
 
 # ---- Guru (Admin) CRUD ----
