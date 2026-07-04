@@ -41,7 +41,7 @@
                     <th>NIS</th>
                     <th>Nama</th>
                     <th>Rombel</th>
-                    <th>Catatan Admin</th>
+                    <th>Status Larangan</th>
                     <th>Aksi</th>
                 </tr>
             </thead>
@@ -145,7 +145,7 @@ var detail_siswa = (id) => {
             { data: 'student_id' },
             { data: 'name' },
             { data: 'class_group' },
-            { data: 'admin_note' },
+            { data: 'ban_status', orderable: false, searchable: false },
             { data: 'actions', orderable: false, searchable: false }
         ],
         language: {

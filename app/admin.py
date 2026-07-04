@@ -4,7 +4,7 @@ from flask import Blueprint, jsonify, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import db
-from .forms import GuruForm, KategoriForm, RombelForm, SiswaForm
+from .forms import GuruForm, KategoriForm, RombelForm, SiswaForm, StudentBanForm
 from .helper import (
     WIB,
     admin_required,
@@ -18,8 +18,47 @@ from .models import (
     CategoryTeacher,
     ClassGroup,
     Student,
+    StudentBan,
     Teacher,
 )
+
+def _can_manage_ban(ban):
+    if session.get("is_superadmin"):
+        return True
+    return session.get("admin_name") == ban.creator.username
+
+
+def _build_siswa_detail_context(student_id):
+    from sqlalchemy.orm import joinedload
+
+    student = db.get_or_404(
+        Student, student_id, options=[joinedload(Student.class_group)]
+    )
+
+    base_query = BorrowingRequest.query.filter_by(student_id=student_id)
+    total = base_query.count()
+    accepted = base_query.filter_by(status="accepted").count()
+    rejected = base_query.filter_by(status="rejected").count()
+    pending = base_query.filter_by(status="pending").count()
+
+    bans = (
+        StudentBan.query.options(joinedload(StudentBan.creator))
+        .filter_by(student_id=student.id)
+        .order_by(StudentBan.created_at.desc())
+        .all()
+    )
+    has_active_ban = any(b.is_active for b in bans)
+
+    return {
+        "student": student,
+        "total_requests": total,
+        "accepted_requests": accepted,
+        "rejected_requests": rejected,
+        "pending_requests": pending,
+        "bans": bans,
+        "has_active_ban": has_active_ban,
+    }
+
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -206,6 +245,29 @@ def siswa_data():
         .order_by(Student.id)
         .all()
     )
+
+    student_ids = [s.id for s in students]
+    today = datetime.now(WIB).date()
+    active_ban_ids = set()
+    has_ban_ids = set()
+    if student_ids:
+        active_ban_ids = set(
+            sid
+            for (sid,) in db.session.query(StudentBan.student_id)
+            .filter(
+                StudentBan.student_id.in_(student_ids),
+                StudentBan.start_date <= today,
+                StudentBan.end_date >= today,
+            )
+            .all()
+        )
+        has_ban_ids = set(
+            sid
+            for (sid,) in db.session.query(StudentBan.student_id)
+            .filter(StudentBan.student_id.in_(student_ids))
+            .all()
+        )
+
     is_superadmin = session.get("is_superadmin", False)
     data = []
     for i, student in enumerate(students, 1):
@@ -226,6 +288,18 @@ def siswa_data():
             )
         else:
             actions = detail_btn
+
+        if student.id in active_ban_ids:
+            ban_status = (
+                '<span class="badge bg-danger">Sedang Dilrang</span>'
+            )
+        elif student.id in has_ban_ids:
+            ban_status = (
+                '<span class="badge bg-warning text-dark">Pernah Dilrang</span>'
+            )
+        else:
+            ban_status = '<span class="badge bg-success">Aman</span>'
+
         data.append(
             {
                 "no": i,
@@ -234,7 +308,7 @@ def siswa_data():
                 "class_group": student.class_group.display_name
                 if student.class_group
                 else "-",
-                "admin_note": student.admin_note or "",
+                "ban_status": ban_status,
                 "actions": actions,
             }
         )
@@ -663,28 +737,14 @@ def _siswa_requests_query(student_id, start_date=None, end_date=None):
 @bp.route("/siswa/<int:id>")
 @admin_required
 def siswa_detail(id):
-    from sqlalchemy.orm import joinedload
-
-    student = db.get_or_404(
-        Student, id, options=[joinedload(Student.class_group)]
-    )
-
-    base_query = BorrowingRequest.query.filter_by(student_id=id)
-    total = base_query.count()
-    accepted = base_query.filter_by(status="accepted").count()
-    rejected = base_query.filter_by(status="rejected").count()
-    pending = base_query.filter_by(status="pending").count()
+    context = _build_siswa_detail_context(id)
 
     return hx_render(
         "admin/siswa_detail.jinja",
-        student=student,
-        total_requests=total,
-        accepted_requests=accepted,
-        rejected_requests=rejected,
-        pending_requests=pending,
         start_date=request.args.get("start_date", ""),
         end_date=request.args.get("end_date", ""),
         push_url=url_for("admin.siswa_detail", id=id),
+        **context,
     )
 
 
@@ -857,6 +917,198 @@ def siswa_detail_export(id):
         as_attachment=True,
         download_name=download_name,
     )
+
+
+# ---- Larangan (StudentBan) CRUD terpusat ----
+
+
+def _populate_ban_student_choices(form):
+    from sqlalchemy.orm import joinedload
+
+    students = (
+        Student.query.options(joinedload(Student.class_group))
+        .filter_by(is_deleted=False)
+        .order_by(Student.name)
+        .all()
+    )
+    form.student_id.choices = [("", "Pilih siswa")] + [
+        (s.id, "{} - {}".format(s.student_id, s.name)) for s in students
+    ]
+
+
+@bp.route("/larangan")
+@admin_required
+def larangan():
+    return hx_render("admin/larangan.jinja")
+
+
+@bp.route("/larangan/data")
+@admin_required
+def larangan_data():
+    from sqlalchemy.orm import joinedload
+
+    bans = (
+        StudentBan.query.options(
+            joinedload(StudentBan.student).joinedload(Student.class_group),
+            joinedload(StudentBan.creator),
+        )
+        .order_by(StudentBan.start_date.desc(), StudentBan.id.desc())
+        .all()
+    )
+
+    is_superadmin = session.get("is_superadmin", False)
+    username = session.get("admin_name")
+    data = []
+    for i, ban in enumerate(bans, 1):
+        student = ban.student
+        can_manage = is_superadmin or (
+            ban.creator is not None and username == ban.creator.username
+        )
+        if can_manage:
+            actions = (
+                '<a class="btn btn-sm btn-warning" '
+                f"onclick=\"edit_larangan({ban.id})\">"
+                '<i class="bi bi-pencil"></i> Edit</a>'
+            )
+            if not ban.is_concluded:
+                student_name = sanitize(student.name) if student else "-"
+                actions += (
+                    ' <button type="button" class="btn btn-sm btn-danger" '
+                    f"onclick=\"hapus_larangan({ban.id}, "
+                    f"'{student_name}', "
+                    f"'{ban.start_date.strftime('%d/%m/%Y')}', "
+                    f"'{ban.end_date.strftime('%d/%m/%Y')}')\">"
+                    '<i class="bi bi-trash"></i> Hapus</button>'
+                )
+        else:
+            actions = "-"
+
+        if ban.is_active:
+            status = '<span class="badge bg-danger">Aktif</span>'
+        elif ban.is_concluded:
+            status = '<span class="badge bg-secondary">Selesai</span>'
+        else:
+            status = '<span class="badge bg-info">Mendatang</span>'
+
+        data.append(
+            {
+                "no": i,
+                "nis": student.student_id if student else "-",
+                "name": student.name if student else "-",
+                "class_group": (
+                    student.class_group.display_name
+                    if student and student.class_group
+                    else "-"
+                ),
+                "start_date": ban.start_date.strftime("%d/%m/%Y"),
+                "end_date": ban.end_date.strftime("%d/%m/%Y"),
+                "reason": ban.reason,
+                "creator": (
+                    ban.creator.name or ban.creator.username
+                    if ban.creator
+                    else "-"
+                ),
+                "status": status,
+                "actions": actions,
+            }
+        )
+    return jsonify(data=data)
+
+
+@bp.route("/larangan/tambah", methods=["GET", "POST"])
+@admin_required
+def larangan_tambah():
+    form = StudentBanForm()
+    _populate_ban_student_choices(form)
+    notif = {}
+
+    if request.method == "GET":
+        return hx_render("admin/larangan_form.jinja", ban=None, form=form)
+
+    if (
+        request.form.get("start_date")
+        and request.form.get("end_date")
+        and request.form["start_date"] > request.form["end_date"]
+    ):
+        notif["error"] = (
+            "Tanggal mulai tidak boleh lebih besar dari tanggal selesai"
+        )
+        return hx_render(
+            "admin/larangan_form.jinja", ban=None, form=form, **notif
+        )
+
+    if not form.validate_on_submit():
+        return hx_render("admin/larangan_form.jinja", ban=None, form=form)
+
+    creator = Teacher.query.filter_by(username=session["admin_name"]).first()
+    ban = StudentBan(
+        student_id=form.student_id.data,
+        creator_id=creator.id,
+        start_date=form.start_date.data,
+        end_date=form.end_date.data,
+        reason=sanitize(form.reason.data),
+    )
+    db.session.add(ban)
+    db.session.commit()
+    notif["success"] = "Larangan berhasil ditambahkan"
+    return hx_render("admin/larangan.jinja", push_url="admin.larangan", **notif)
+
+
+@bp.route("/larangan/edit/<int:ban_id>", methods=["GET", "POST"])
+@admin_required
+def larangan_edit(ban_id):
+    ban = db.get_or_404(StudentBan, ban_id)
+    notif = {}
+
+    if not _can_manage_ban(ban):
+        notif["error"] = "Anda tidak berwenang mengedit larangan ini"
+        return hx_render("admin/larangan.jinja", push_url="admin.larangan", **notif)
+
+    form = StudentBanForm(obj=ban)
+    _populate_ban_student_choices(form)
+    if request.method == "GET":
+        form.student_id.data = ban.student_id
+        form.start_date.data = ban.start_date
+        form.end_date.data = ban.end_date
+        form.reason.data = ban.reason
+        return hx_render("admin/larangan_form.jinja", ban=ban, form=form)
+
+    if not form.validate_on_submit():
+        return hx_render("admin/larangan_form.jinja", ban=ban, form=form)
+
+    if form.start_date.data > form.end_date.data:
+        notif["error"] = (
+            "Tanggal mulai tidak boleh lebih besar dari tanggal selesai"
+        )
+        return hx_render(
+            "admin/larangan_form.jinja", ban=ban, form=form, **notif
+        )
+
+    ban.student_id = form.student_id.data
+    ban.start_date = form.start_date.data
+    ban.end_date = form.end_date.data
+    ban.reason = sanitize(form.reason.data)
+    db.session.commit()
+    notif["success"] = "Larangan berhasil diperbarui"
+    return hx_render("admin/larangan.jinja", push_url="admin.larangan", **notif)
+
+
+@bp.route("/larangan/hapus", methods=["POST"])
+@admin_required
+def larangan_hapus():
+    ban_id = request.form.get("id", type=int)
+    ban = db.get_or_404(StudentBan, ban_id)
+    notif = {}
+
+    if not _can_manage_ban(ban):
+        notif["error"] = "Anda tidak berwenang menghapus larangan ini"
+    elif ban.is_concluded:
+        notif["error"] = "Larangan yang sudah selesai tidak dapat dihapus"
+    else:
+        db.session.delete(ban)
+        db.session.commit()
+        notif["success"] = "Larangan berhasil dihapus"
+    return hx_render("admin/larangan.jinja", push_url="admin.larangan", **notif)
 
 
 # ---- Guru (Admin) CRUD ----

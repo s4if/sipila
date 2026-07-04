@@ -90,6 +90,45 @@ class CategoryTeacher(db.Model):
         )
 
 
+class StudentBan(db.Model):
+    __tablename__ = "student_bans"
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(
+        db.Integer, db.ForeignKey("students.id"), nullable=False
+    )
+    creator_id = db.Column(
+        db.Integer, db.ForeignKey("teachers.id"), nullable=False
+    )
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.String(256), nullable=False)
+    created_at = db.Column(
+        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+    student = db.relationship("Student", backref=db.backref("bans", lazy="dynamic"))
+    creator = db.relationship("Teacher", backref="created_bans")
+
+    def __repr__(self):
+        return "<StudentBan student_id={} start={} end={}>".format(
+            self.student_id, self.start_date, self.end_date
+        )
+
+    @property
+    def is_active(self):
+        from datetime import date
+
+        today = date.today()
+        return self.start_date <= today <= self.end_date
+
+    @property
+    def is_concluded(self):
+        from datetime import date
+
+        return self.end_date < date.today()
+
+
 class BorrowingRequest(db.Model):
     __tablename__ = "borrowing_requests"
     __table_args__ = (db.UniqueConstraint("student_id", "date"),)

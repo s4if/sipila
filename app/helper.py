@@ -82,6 +82,19 @@ def hx_render(template, push_url=None, **kwargs):
     return render_template(template, **kwargs)
 
 
+def get_active_ban(student_id):
+    from datetime import date
+
+    from app.models import StudentBan
+
+    today = date.today()
+    return StudentBan.query.filter(
+        StudentBan.student_id == student_id,
+        StudentBan.start_date <= today,
+        StudentBan.end_date >= today,
+    ).first()
+
+
 def sanitize(input_str):
     # check if it is None then return None
     if input_str is None:

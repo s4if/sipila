@@ -73,6 +73,21 @@ class RombelForm(FlaskForm):
     )
 
 
+class StudentBanForm(FlaskForm):
+    student_id = SelectField(
+        "Siswa",
+        coerce=lambda x: int(x) if x else None,
+        validators=[DataRequired()],
+    )
+    start_date = DateField(
+        "Tanggal Mulai", validators=[DataRequired()], format="%Y-%m-%d"
+    )
+    end_date = DateField(
+        "Tanggal Selesai", validators=[DataRequired()], format="%Y-%m-%d"
+    )
+    reason = StringField("Alasan", validators=[DataRequired()])
+
+
 class KategoriForm(FlaskForm):
     name = StringField("Nama Kategori", validators=[DataRequired()])
     teachers = SelectMultipleField(

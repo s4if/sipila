@@ -718,6 +718,18 @@ def test_siswa_data_returns_json(logged_in_client):
     assert "data" in data
 
 
+def test_siswa_data_shows_ban_status(logged_in_client, siswa_user, student_ban):
+    response = logged_in_client.get("/admin/siswa/data")
+    assert response.status_code == 200
+    assert b"Sedang Dilrang" in response.data
+
+
+def test_siswa_data_shows_aman_when_no_ban(logged_in_client, siswa_user):
+    response = logged_in_client.get("/admin/siswa/data")
+    assert response.status_code == 200
+    assert b"Aman" in response.data
+
+
 def test_siswa_tambah_page_get(logged_in_client, app):
     with app.app_context():
         _create_class_group()
@@ -1097,3 +1109,180 @@ def test_siswa_detail_regular_admin_category_filter(
     data = response.get_json()
     # regular admin manages no categories -> sees no requests
     assert len(data["data"]) == 0
+
+
+# ---- Larangan (StudentBan) CRUD terpusat tests ----
+
+
+def test_larangan_index_renders(logged_in_client):
+    rv = logged_in_client.get("/admin/larangan")
+    assert rv.status_code == 200
+    assert b"Data Larangan" in rv.data
+
+
+def test_larangan_data_returns_rows(logged_in_client, siswa_user, student_ban):
+    rv = logged_in_client.get("/admin/larangan/data")
+    assert rv.status_code == 200
+    assert b"Tes larangan" in rv.data
+
+
+def test_larangan_tambah_renders_form(logged_in_client):
+    rv = logged_in_client.get("/admin/larangan/tambah")
+    assert rv.status_code == 200
+    assert b"Tambah Larangan" in rv.data
+
+
+def test_larangan_tambah_success(logged_in_client, siswa_user):
+    rv = logged_in_client.post(
+        "/admin/larangan/tambah",
+        data={
+            "student_id": siswa_user.id,
+            "start_date": "2026-07-01",
+            "end_date": "2026-07-07",
+            "reason": "Terlambat mengembalikan",
+        },
+        follow_redirects=True,
+    )
+    assert rv.status_code == 200
+    assert b"berhasil ditambahkan" in rv.data
+
+
+def test_larangan_tambah_invalid_date_range(logged_in_client, siswa_user):
+    rv = logged_in_client.post(
+        "/admin/larangan/tambah",
+        data={
+            "student_id": siswa_user.id,
+            "start_date": "2026-07-07",
+            "end_date": "2026-07-01",
+            "reason": "Tes",
+        },
+    )
+    assert rv.status_code == 200
+    assert b"Tanggal mulai tidak boleh lebih besar" in rv.data
+
+
+def test_larangan_edit_renders_form(logged_in_client, siswa_user, student_ban):
+    rv = logged_in_client.get("/admin/larangan/edit/{}".format(student_ban.id))
+    assert rv.status_code == 200
+    assert b"Edit Larangan" in rv.data
+
+
+def test_larangan_edit_success(logged_in_client, siswa_user, student_ban):
+    rv = logged_in_client.post(
+        "/admin/larangan/edit/{}".format(student_ban.id),
+        data={
+            "student_id": siswa_user.id,
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-07",
+            "reason": "Diperbarui",
+        },
+        follow_redirects=True,
+    )
+    assert rv.status_code == 200
+    assert b"berhasil diperbarui" in rv.data
+
+
+def test_larangan_edit_by_non_creator_blocked(
+    regular_admin_client, siswa_user, student_ban
+):
+    # student_ban dibuat oleh admin_user (superadmin), guru biasa tidak boleh edit
+    rv = regular_admin_client.post(
+        "/admin/larangan/edit/{}".format(student_ban.id),
+        data={
+            "student_id": siswa_user.id,
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-07",
+            "reason": "Coba edit",
+        },
+        follow_redirects=True,
+    )
+    assert rv.status_code == 200
+    assert b"tidak berwenang" in rv.data
+
+
+def test_larangan_hapus_success(logged_in_client, siswa_user, student_ban):
+    rv = logged_in_client.post(
+        "/admin/larangan/hapus",
+        data={"id": student_ban.id},
+        follow_redirects=True,
+    )
+    assert rv.status_code == 200
+    assert b"berhasil dihapus" in rv.data
+
+
+def test_larangan_hapus_by_non_creator_blocked(
+    regular_admin_client, siswa_user, student_ban
+):
+    rv = regular_admin_client.post(
+        "/admin/larangan/hapus",
+        data={"id": student_ban.id},
+        follow_redirects=True,
+    )
+    assert rv.status_code == 200
+    assert b"tidak berwenang" in rv.data
+
+
+def test_larangan_hapus_concluded_blocked(
+    logged_in_client, siswa_user, concluded_student_ban
+):
+    rv = logged_in_client.post(
+        "/admin/larangan/hapus",
+        data={"id": concluded_student_ban.id},
+        follow_redirects=True,
+    )
+    assert rv.status_code == 200
+    assert b"sudah selesai tidak dapat dihapus" in rv.data
+
+
+def test_student_detail_ban_history_is_read_only(
+    logged_in_client, siswa_user, student_ban
+):
+    # Tidak ada tombol hapus inline maupun modal hapus ban di detail siswa
+    rv = logged_in_client.get("/admin/siswa/{}".format(siswa_user.id))
+    assert b"modalHapusBan" not in rv.data
+    assert b"hapus_ban" not in rv.data
+
+
+# ---- Student-side ban guard tests ----
+
+
+def test_siswa_beranda_shows_create_button_when_no_ban(logged_in_siswa_client):
+    rv = logged_in_siswa_client.get("/siswa/")
+    assert rv.status_code == 200
+    assert b"Buat Permintaan" in rv.data
+
+
+def test_siswa_beranda_shows_ban_warning_when_active_ban(
+    logged_in_siswa_client, student_ban
+):
+    rv = logged_in_siswa_client.get("/siswa/")
+    assert rv.status_code == 200
+    assert b"sedang dilrang" in rv.data
+    assert b"Alasan" in rv.data
+
+
+def test_siswa_with_active_ban_cannot_create_request(
+    logged_in_siswa_client, student_ban
+):
+    rv = logged_in_siswa_client.get("/siswa/permintaan/tambah")
+    assert rv.status_code == 200
+    assert b"dalam masa larangan" in rv.data
+
+
+def test_siswa_without_ban_can_access_create_request(logged_in_siswa_client):
+    rv = logged_in_siswa_client.get("/siswa/permintaan/tambah")
+    assert rv.status_code == 200
+    assert b"Tanggal Pinjam" in rv.data
+
+
+def test_student_detail_shows_bans(logged_in_client, siswa_user, student_ban):
+    rv = logged_in_client.get("/admin/siswa/{}".format(siswa_user.id))
+    assert rv.status_code == 200
+    assert b"Riwayat Larangan" in rv.data
+    assert b"Tes larangan" in rv.data
+
+
+def test_student_detail_no_bans_when_empty(logged_in_client, siswa_user):
+    rv = logged_in_client.get("/admin/siswa/{}".format(siswa_user.id))
+    assert rv.status_code == 200
+    assert b"Riwayat Larangan" not in rv.data

@@ -1,0 +1,74 @@
+{% if not is_htmx %}
+    {% extends "admin/layout.jinja" %}
+    {% block title %}{{ 'Edit Larangan' if ban else 'Tambah Larangan' }}{% endblock %}
+{% else %}
+    <title>{{ 'Edit Larangan' if ban else 'Tambah Larangan' }}</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<h4 class="mb-3">{{ 'Edit Larangan' if ban else 'Tambah Larangan' }}</h4>
+
+<div class="row">
+    <div class="col">
+        <form method="POST"
+              action="{{ url_for('admin.larangan_edit', ban_id=ban.id) if ban else url_for('admin.larangan_tambah') }}"
+              hx-post="{{ url_for('admin.larangan_edit', ban_id=ban.id) if ban else url_for('admin.larangan_tambah') }}"
+              hx-target="#hx_content"
+              hx-swap="innerHTML">
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                {{ form.student_id.label(class='form-label') }}
+                {{ form.student_id(class='form-select' + (' is-invalid' if form.student_id.errors else ''), required=True) }}
+                {% if form.student_id.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.student_id.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.start_date.label(class='form-label') }}
+                {{ form.start_date(class='form-control' + (' is-invalid' if form.start_date.errors else ''), type='date', required=True) }}
+                {% if form.start_date.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.start_date.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.end_date.label(class='form-label') }}
+                {{ form.end_date(class='form-control' + (' is-invalid' if form.end_date.errors else ''), type='date', required=True) }}
+                {% if form.end_date.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.end_date.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.reason.label(class='form-label') }}
+                {{ form.reason(class='form-control' + (' is-invalid' if form.reason.errors else ''), required=True) }}
+                {% if form.reason.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.reason.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">
+                    {{ 'Simpan Perubahan' if ban else 'Tambah Larangan' }}
+                </button>
+                <a class="btn btn-secondary ms-2"
+                   href="{{ url_for('admin.larangan') }}"
+                   hx-get="{{ url_for('admin.larangan') }}"
+                   hx-target="#hx_content"
+                   hx-swap="innerHTML">Batal</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}
