@@ -7,12 +7,29 @@ from wtforms import (
     StringField,
     TextAreaField,
 )
-from wtforms.validators import DataRequired, Optional
+from wtforms.validators import DataRequired, EqualTo, Optional
 
 
 class LoginForm(FlaskForm):
     username = StringField("Username", validators=[DataRequired()])
     password = PasswordField("Password", validators=[DataRequired()])
+
+
+class GantiPasswordForm(FlaskForm):
+    current_password = PasswordField(
+        "Password Sekarang", validators=[DataRequired()]
+    )
+    new_password = PasswordField("Password Baru", validators=[DataRequired()])
+    confirm_password = PasswordField(
+        "Konfirmasi Password",
+        validators=[
+            DataRequired(),
+            EqualTo(
+                "new_password",
+                message="Konfirmasi password tidak sesuai",
+            ),
+        ],
+    )
 
 
 class SiswaLoginForm(FlaskForm):
@@ -71,6 +88,21 @@ class RombelForm(FlaskForm):
         coerce=lambda x: int(x) if x else None,
         validators=[Optional()],
     )
+
+
+class StudentBanForm(FlaskForm):
+    student_id = SelectField(
+        "Siswa",
+        coerce=lambda x: int(x) if x else None,
+        validators=[DataRequired()],
+    )
+    start_date = DateField(
+        "Tanggal Mulai", validators=[DataRequired()], format="%Y-%m-%d"
+    )
+    end_date = DateField(
+        "Tanggal Selesai", validators=[DataRequired()], format="%Y-%m-%d"
+    )
+    reason = StringField("Alasan", validators=[DataRequired()])
 
 
 class KategoriForm(FlaskForm):

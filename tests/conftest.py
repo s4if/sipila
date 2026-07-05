@@ -129,17 +129,69 @@ def kategori_with_teacher(app, admin_user):
 
 @pytest.fixture
 def borrowing_request(app, siswa_user, kategori_with_teacher):
-    from datetime import datetime
-
-    from app.helper import WIB
+    from app.helper import get_today
     from app.models import BorrowingRequest
 
     req = BorrowingRequest(
         student_id=siswa_user.id,
         category_id=kategori_with_teacher.id,
-        date=datetime.now(WIB).date(),
+        date=get_today(),
         status="pending",
     )
     db.session.add(req)
     db.session.commit()
     return req
+
+
+@pytest.fixture
+def student_ban(app, siswa_user, admin_user):
+    from datetime import date
+
+    from app.models import StudentBan
+
+    ban = StudentBan(
+        student_id=siswa_user.id,
+        creator_id=admin_user.id,
+        start_date=date.today(),
+        end_date=date.today(),
+        reason="Tes larangan",
+    )
+    db.session.add(ban)
+    db.session.commit()
+    return ban
+
+
+@pytest.fixture
+def concluded_student_ban(app, siswa_user, admin_user):
+    from datetime import date, timedelta
+
+    from app.models import StudentBan
+
+    ban = StudentBan(
+        student_id=siswa_user.id,
+        creator_id=admin_user.id,
+        start_date=date.today() - timedelta(days=7),
+        end_date=date.today() - timedelta(days=1),
+        reason="Larangan selesai",
+    )
+    db.session.add(ban)
+    db.session.commit()
+    return ban
+
+
+@pytest.fixture
+def ban_by_regular_admin(app, siswa_user, regular_admin):
+    from datetime import date
+
+    from app.models import StudentBan
+
+    ban = StudentBan(
+        student_id=siswa_user.id,
+        creator_id=regular_admin.id,
+        start_date=date.today(),
+        end_date=date.today(),
+        reason="Larangan oleh guru biasa",
+    )
+    db.session.add(ban)
+    db.session.commit()
+    return ban

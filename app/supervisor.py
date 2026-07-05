@@ -1,9 +1,9 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request, send_file, session
 
 from .db import db
-from .helper import WIB, admin_required, hx_render
+from .helper import admin_required, get_now, get_today, hx_render
 from .models import BorrowingRequest, Student, Teacher
 
 bp = Blueprint("supervisor", __name__, url_prefix="/supervisor")
@@ -25,7 +25,7 @@ def _parse_tanggal(tanggal_str, default):
 @bp.route("/monitor")
 @admin_required
 def monitor():
-    today = datetime.now(WIB).date()
+    today = get_today()
     tanggal = _parse_tanggal(request.args.get("tanggal"), today)
 
     return hx_render(
@@ -41,7 +41,7 @@ def monitor():
 def monitor_data():
     from sqlalchemy.orm import joinedload
 
-    today = datetime.now(WIB).date()
+    today = get_today()
     tanggal = _parse_tanggal(request.args.get("tanggal"), today)
 
     requests = (
@@ -97,7 +97,7 @@ def monitor_export():
     from openpyxl.utils import get_column_letter
     from sqlalchemy.orm import joinedload
 
-    today = datetime.now(WIB).date()
+    today = get_today()
     tanggal_mulai = _parse_tanggal(
         request.args.get("tanggal_mulai"), today - timedelta(days=30)
     )
@@ -259,7 +259,7 @@ def monitor_konfirmasi(id):
 
     req.confirmation = confirmation
     req.confirmed_by = teacher.id
-    req.confirmed_at = datetime.now(timezone.utc)
+    req.confirmed_at = get_now()
     db.session.commit()
 
     label = "digunakan" if confirmation == "used" else "tidak digunakan"

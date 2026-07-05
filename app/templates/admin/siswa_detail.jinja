@@ -13,7 +13,7 @@
 
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <h4 class="mb-0">Detail Siswa</h4>
-    <a class="btn btn-secondary"
+    <a class="btn btn-secondary btn-sm"
        href="{{ url_for('admin.siswa') }}"
        hx-get="{{ url_for('admin.siswa') }}"
        hx-target="#hx_content"
@@ -44,6 +44,17 @@
                     <tr>
                         <th class="ps-0">Catatan Admin</th>
                         <td>{{ student.admin_note }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if has_active_ban %}
+                    <tr>
+                        <th class="ps-0">Status</th>
+                        <td><span class="badge bg-danger">Sedang Dilrang</span></td>
+                    </tr>
+                    {% elif bans %}
+                    <tr>
+                        <th class="ps-0">Status</th>
+                        <td><span class="badge bg-warning text-dark">Pernah Dilrang</span></td>
                     </tr>
                     {% endif %}
                 </table>
@@ -200,5 +211,51 @@ var detail_permintaan = function(id) {
     });
 })();
 </script>
+
+{% if bans %}
+<h5 class="mb-3 mt-4">Riwayat Larangan</h5>
+
+<div class="table-responsive">
+    <table class="table table-striped table-bordered">
+        <thead>
+            <tr>
+                <th>No</th>
+                <th>Tanggal Mulai</th>
+                <th>Tanggal Selesai</th>
+                <th>Alasan</th>
+                <th>Dibuat Oleh</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ban in bans %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ ban.start_date.strftime('%d/%m/%Y') }}</td>
+                <td>{{ ban.end_date.strftime('%d/%m/%Y') }}</td>
+                <td>{{ ban.reason }}</td>
+                <td>{{ ban.creator.name or ban.creator.username }}</td>
+                <td>
+                    {% if ban.is_active %}
+                    <span class="badge bg-danger">Aktif</span>
+                    {% elif ban.is_concluded %}
+                    <span class="badge bg-secondary">Selesai</span>
+                    {% else %}
+                    <span class="badge bg-info">Mendatang</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="form-text">
+    <i class="bi bi-info-circle"></i>
+    Pengelolaan larangan dilakukan di halaman
+    <a href="{{ url_for('admin.larangan') }}"
+       hx-get="{{ url_for('admin.larangan') }}"
+       hx-target="#hx_content" hx-swap="innerHTML">Larangan</a>.
+</div>
+{% endif %}
 
 {% endblock %}

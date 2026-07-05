@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
-
 from app import db
+from app.helper import get_now, get_today
 
 
 class Teacher(db.Model):
@@ -90,6 +89,40 @@ class CategoryTeacher(db.Model):
         )
 
 
+class StudentBan(db.Model):
+    __tablename__ = "student_bans"
+
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(
+        db.Integer, db.ForeignKey("students.id"), nullable=False
+    )
+    creator_id = db.Column(
+        db.Integer, db.ForeignKey("teachers.id"), nullable=False
+    )
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    reason = db.Column(db.String(256), nullable=False)
+    created_at = db.Column(
+        db.DateTime, nullable=False, default=get_now
+    )
+
+    student = db.relationship("Student", backref=db.backref("bans", lazy="dynamic"))
+    creator = db.relationship("Teacher", backref="created_bans")
+
+    def __repr__(self):
+        return "<StudentBan student_id={} start={} end={}>".format(
+            self.student_id, self.start_date, self.end_date
+        )
+
+    @property
+    def is_active(self):
+        return self.start_date <= get_today() <= self.end_date
+
+    @property
+    def is_concluded(self):
+        return self.end_date < get_today()
+
+
 class BorrowingRequest(db.Model):
     __tablename__ = "borrowing_requests"
     __table_args__ = (db.UniqueConstraint("student_id", "date"),)
@@ -108,7 +141,7 @@ class BorrowingRequest(db.Model):
     student_note = db.Column(db.String(256), nullable=True)
     teacher_note = db.Column(db.String(256), nullable=True)
     created_at = db.Column(
-        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+        db.DateTime, nullable=False, default=get_now
     )
     reviewed_at = db.Column(db.DateTime, nullable=True)
     confirmation = db.Column(db.String(16), nullable=True)
