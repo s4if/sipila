@@ -1,17 +1,17 @@
-from datetime import date, datetime, timedelta
+from datetime import timedelta
 
 from flask import Blueprint, jsonify, redirect, request, session, url_for
 
 from .db import db
 from .forms import PermintaanSiswaForm
-from .helper import WIB, hx_render, login_required, sanitize
+from .helper import get_today, hx_render, login_required, sanitize
 from .models import BorrowingRequest, Category, StudentBan
 
 bp = Blueprint("siswa", __name__, url_prefix="/siswa")
 
 
 def _date_range():
-    min_date = datetime.now(WIB).date()
+    min_date = get_today()
     max_date = min_date + timedelta(days=7)
     return min_date, max_date
 
@@ -22,8 +22,8 @@ def beranda():
     student_db_id = session["student_db_id"]
     active_ban = StudentBan.query.filter(
         StudentBan.student_id == student_db_id,
-        StudentBan.start_date <= date.today(),
-        StudentBan.end_date >= date.today(),
+        StudentBan.start_date <= get_today(),
+        StudentBan.end_date >= get_today(),
     ).first()
 
     return hx_render(
@@ -39,7 +39,7 @@ def permintaan_data():
     from sqlalchemy.orm import joinedload
 
     student_db_id = session["student_db_id"]
-    today = datetime.now(WIB).date()
+    today = get_today()
     start_date = today - timedelta(days=7)
     requests = (
         BorrowingRequest.query.options(
@@ -99,8 +99,8 @@ def permintaan_tambah():
     student_db_id = session["student_db_id"]
     active_ban = StudentBan.query.filter(
         StudentBan.student_id == student_db_id,
-        StudentBan.start_date <= date.today(),
-        StudentBan.end_date >= date.today(),
+        StudentBan.start_date <= get_today(),
+        StudentBan.end_date >= get_today(),
     ).first()
     if active_ban:
         notif = {
@@ -182,8 +182,8 @@ def permintaan_edit(id):
     student_db_id = session["student_db_id"]
     active_ban = StudentBan.query.filter(
         StudentBan.student_id == student_db_id,
-        StudentBan.start_date <= date.today(),
-        StudentBan.end_date >= date.today(),
+        StudentBan.start_date <= get_today(),
+        StudentBan.end_date >= get_today(),
     ).first()
     if active_ban:
         notif = {

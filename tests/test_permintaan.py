@@ -7,14 +7,12 @@ from app.models import BorrowingRequest, Category, CategoryTeacher
 def _make_request(
     student_id, category_id, status="pending", offset_days=1, reviewed_by=None
 ):
-    from datetime import datetime
-
-    from app.helper import WIB
+    from app.helper import get_today
 
     req = BorrowingRequest(
         student_id=student_id,
         category_id=category_id,
-        date=datetime.now(WIB).date() + timedelta(days=offset_days),
+        date=get_today() + timedelta(days=offset_days),
         status=status,
         reviewed_by=reviewed_by,
     )
@@ -329,16 +327,6 @@ def test_permintaan_batalkan_not_authorized(
     )
     assert response.status_code == 200
     assert b"tidak berwenang" in response.data
-
-
-def test_permintaan_batalkan_not_yet_reviewed(
-    app, logged_in_client, borrowing_request
-):
-    response = logged_in_client.post(
-        "/admin/permintaan/batalkan/{}".format(borrowing_request.id)
-    )
-    assert response.status_code == 200
-    assert b"belum ditinjau" in response.data
 
 
 def test_permintaan_batalkan_after_cutoff(

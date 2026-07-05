@@ -1,14 +1,24 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, request, session, url_for
+from markupsafe import Markup, escape
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import db
-from .forms import GuruForm, KategoriForm, RombelForm, SiswaForm, StudentBanForm
+from .forms import (
+    GantiPasswordForm,
+    GuruForm,
+    KategoriForm,
+    RombelForm,
+    SiswaForm,
+    StudentBanForm,
+)
 from .helper import (
-    WIB,
     admin_required,
+    get_now,
+    get_today,
     hx_render,
+    js_escape,
     sanitize,
     superadmin_required,
 )
@@ -72,22 +82,22 @@ def beranda():
 @bp.route("/ganti_password", methods=["GET", "POST"])
 @admin_required
 def ganti_password():
+    form = GantiPasswordForm(request.form)
     if request.method == "GET":
-        return hx_render("admin/ganti_password.jinja")
+        return hx_render("admin/ganti_password.jinja", form=form)
 
     notif = {}
+    if not form.validate_on_submit():
+        return hx_render("admin/ganti_password.jinja", form=form)
+
     admin = Teacher.query.filter_by(username=session["admin_name"]).first()
-    if request.form["new_password"] != request.form["confirm_password"]:
-        notif["error"] = "Konfirmasi password tidak sesuai"
-    elif admin and check_password_hash(
-        admin.password, request.form["current_password"]
-    ):
-        admin.password = generate_password_hash(request.form["new_password"])
+    if admin and check_password_hash(admin.password, form.current_password.data):
+        admin.password = generate_password_hash(form.new_password.data)
         db.session.commit()
         notif["success"] = "Password berhasil diubah"
     else:
         notif["error"] = "Password lama tidak sesuai"
-    return hx_render("admin/ganti_password.jinja", **notif)
+    return hx_render("admin/ganti_password.jinja", form=form, **notif)
 
 
 # ---- Rombel (ClassGroup) CRUD ----
@@ -139,7 +149,7 @@ def rombel_data():
                     f'onclick="edit_rombel({cg.id})">'
                     '<i class="bi bi-pencil"></i> Edit</a> '
                     '<button type="button" class="btn btn-sm btn-danger" '
-                    f"onclick=\"hapus_rombel({cg.id}, '{sanitize(cg.display_name)}')\">"
+                    f"onclick=\"hapus_rombel({cg.id}, '{js_escape(sanitize(cg.display_name))}')\">"
                     '<i class="bi bi-trash"></i> Hapus</button>'
                 )
                 if is_superadmin
@@ -247,7 +257,7 @@ def siswa_data():
     )
 
     student_ids = [s.id for s in students]
-    today = datetime.now(WIB).date()
+    today = get_today()
     active_ban_ids = set()
     has_ban_ids = set()
     if student_ids:
@@ -283,7 +293,7 @@ def siswa_data():
                 f'onclick="edit_siswa({student.id})">'
                 '<i class="bi bi-pencil"></i> Edit</a> '
                 '<button type="button" class="btn btn-sm btn-danger" '
-                f"onclick=\"hapus_siswa({student.id}, '{sanitize(student.name)}')\">"
+                f"onclick=\"hapus_siswa({student.id}, '{js_escape(sanitize(student.name))}')\">"
                 '<i class="bi bi-trash"></i> Hapus</button>'
             )
         else:
@@ -643,8 +653,12 @@ def siswa_import():
         )
 
     if validation_errors:
-        notif["error"] = "Validasi gagal:<br>- " + "<br>- ".join(
-            validation_errors
+        # Escape tiap baris lalu tandai aman agar <br> ter-render sebagai
+        # baris baru (bukan teks mentah) di macro render_notif yang memakai
+        # autoescape.
+        notif["error"] = Markup(
+            "Validasi gagal:<br>- "
+            + "<br>- ".join(str(escape(e)) for e in validation_errors)
         )
         return hx_render("admin/siswa.jinja", push_url="admin.siswa", **notif)
 
@@ -763,7 +777,7 @@ def siswa_detail_data(id):
         "rejected": '<span class="badge bg-danger">Ditolak</span>',
         "expired": '<span class="badge bg-secondary">Kadaluarsa</span>',
     }
-    now = datetime.now(WIB)
+    now = get_now()
     data = []
     for i, req in enumerate(requests, 1):
         status = "expired" if _is_kadaluarsa(req, now) else req.status
@@ -803,7 +817,7 @@ def siswa_detail_export(id):
     end_date = _parse_date_param(request.args.get("end_date"))
     requests = _siswa_requests_query(id, start_date, end_date).all()
 
-    now = datetime.now(WIB)
+    now = get_now()
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -971,13 +985,15 @@ def larangan_data():
                 '<i class="bi bi-pencil"></i> Edit</a>'
             )
             if not ban.is_concluded:
-                student_name = sanitize(student.name) if student else "-"
+                student_name = js_escape(sanitize(student.name)) if student else ""
+                start_str = js_escape(ban.start_date.strftime("%d/%m/%Y"))
+                end_str = js_escape(ban.end_date.strftime("%d/%m/%Y"))
                 actions += (
                     ' <button type="button" class="btn btn-sm btn-danger" '
                     f"onclick=\"hapus_larangan({ban.id}, "
                     f"'{student_name}', "
-                    f"'{ban.start_date.strftime('%d/%m/%Y')}', "
-                    f"'{ban.end_date.strftime('%d/%m/%Y')}')\">"
+                    f"'{start_str}', "
+                    f"'{end_str}')\">"
                     '<i class="bi bi-trash"></i> Hapus</button>'
                 )
         else:
@@ -1139,7 +1155,7 @@ def guru_data():
                     f'onclick="edit_guru({a.id})">'
                     '<i class="bi bi-pencil"></i> Edit</a> '
                     '<button type="button" class="btn btn-sm btn-danger" '
-                    f"onclick=\"hapus_guru({a.id}, '{sanitize(a.username)}')\">"
+                    f"onclick=\"hapus_guru({a.id}, '{js_escape(sanitize(a.username))}')\">"
                     '<i class="bi bi-trash"></i> Hapus</button>'
                 ),
             }
@@ -1281,7 +1297,7 @@ def kategori_data():
                     f'onclick="edit_kategori({cat.id})">'
                     '<i class="bi bi-pencil"></i> Edit</a> '
                     '<button type="button" class="btn btn-sm btn-danger" '
-                    f"onclick=\"hapus_kategori({cat.id}, '{sanitize(cat.name)}')\">"
+                    f"onclick=\"hapus_kategori({cat.id}, '{js_escape(sanitize(cat.name))}')\">"
                     '<i class="bi bi-trash"></i> Hapus</button>'
                 )
                 if is_superadmin
@@ -1401,7 +1417,7 @@ def _is_kadaluarsa(req, now=None):
     if req.status != "pending":
         return False
     if now is None:
-        now = datetime.now(WIB)
+        now = get_now()
     return req.date < now.date() or (req.date == now.date() and now.hour >= 17)
 
 
@@ -1424,7 +1440,7 @@ def permintaan_data():
             BorrowingRequest.category_id.in_(teacher_category_ids)
         )
 
-    today = datetime.now(WIB).date()
+    today = get_today()
     start_date = today - timedelta(days=7)
     end_date = today + timedelta(days=14)
     query = query.filter(
@@ -1441,7 +1457,7 @@ def permintaan_data():
         "expired": '<span class="badge bg-secondary">Kadaluarsa</span>',
     }
 
-    now = datetime.now(WIB)
+    now = get_now()
     data = []
     for i, req in enumerate(requests, 1):
         student = req.student
@@ -1538,7 +1554,7 @@ def permintaan_terima(id):
     req.status = "accepted"
     req.reviewed_by = teacher.id
     req.teacher_note = sanitize(request.form.get("teacher_note")) or None
-    req.reviewed_at = datetime.now(timezone.utc)
+    req.reviewed_at = get_now()
     db.session.commit()
 
     return hx_render(
@@ -1577,7 +1593,7 @@ def permintaan_tolak(id):
     req.status = "rejected"
     req.reviewed_by = teacher.id
     req.teacher_note = sanitize(request.form.get("teacher_note")) or None
-    req.reviewed_at = datetime.now(timezone.utc)
+    req.reviewed_at = get_now()
     db.session.commit()
 
     return hx_render(
@@ -1604,7 +1620,7 @@ def permintaan_batalkan(id):
             push_url=url_for("admin.permintaan_detail", id=id),
         )
 
-    now = datetime.now(WIB)
+    now = get_now()
     if req.date < now.date() or (req.date == now.date() and now.hour >= 17):
         return hx_render(
             "admin/permintaan_detail.jinja",

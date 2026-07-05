@@ -1,7 +1,8 @@
-from datetime import date, datetime, timezone
+from datetime import date
 from itertools import count
 
 from app import db
+from app.helper import get_now
 from app.models import (
     BorrowingRequest,
     Category,
@@ -48,12 +49,12 @@ def _setup_borrowing_request(app, status="accepted", confirmation=None, tanggal=
             date=tanggal if tanggal else date.today(),
             status=status,
             reviewed_by=teacher.id,
-            reviewed_at=datetime.now(timezone.utc),
+            reviewed_at=get_now(),
             confirmation=confirmation,
         )
         if confirmation:
             req.confirmed_by = teacher.id
-            req.confirmed_at = datetime.now(timezone.utc)
+            req.confirmed_at = get_now()
         db.session.add(req)
         db.session.commit()
 

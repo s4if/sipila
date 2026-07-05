@@ -129,15 +129,13 @@ def kategori_with_teacher(app, admin_user):
 
 @pytest.fixture
 def borrowing_request(app, siswa_user, kategori_with_teacher):
-    from datetime import datetime
-
-    from app.helper import WIB
+    from app.helper import get_today
     from app.models import BorrowingRequest
 
     req = BorrowingRequest(
         student_id=siswa_user.id,
         category_id=kategori_with_teacher.id,
-        date=datetime.now(WIB).date(),
+        date=get_today(),
         status="pending",
     )
     db.session.add(req)

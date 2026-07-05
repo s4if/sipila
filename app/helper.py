@@ -2,14 +2,23 @@
 
 import functools
 import re
-from datetime import timedelta, timezone
+from datetime import date, datetime
 
 from flask import make_response, redirect, render_template, session, url_for
 from flask_htmx import HTMX
 
 htmx = HTMX()
 
-WIB = timezone(timedelta(hours=7))
+
+def get_today():
+    # Satu-satunya sumber "hari ini" di aplikasi. Naive WIB karena proses
+    # sudah di-pin ke Asia/Jakarta (lihat app/__init__.py).
+    return date.today()
+
+
+def get_now():
+    # Satu-satunya sumber "sekarang" di aplikasi. Naive WIB.
+    return datetime.now()
 
 
 def login_required(view):
@@ -83,16 +92,31 @@ def hx_render(template, push_url=None, **kwargs):
 
 
 def get_active_ban(student_id):
-    from datetime import date
-
     from app.models import StudentBan
 
-    today = date.today()
+    today = get_today()
     return StudentBan.query.filter(
         StudentBan.student_id == student_id,
         StudentBan.start_date <= today,
         StudentBan.end_date >= today,
     ).first()
+
+
+def js_escape(input_str):
+    # Escape string untuk konteks atribut JS string literal (single-quoted)
+    # sanitize() tidak membuang kutip/backslash, jadi nilai yang disisipkan
+    # ke onclick="fn('...')" harus di-escape agar tidak memutus string atau
+    # memicu stored-XSS (mis. nama "O'Brien" atau "');alert(1)//").
+    if input_str is None:
+        return ""
+    if not isinstance(input_str, str):
+        input_str = str(input_str)
+    input_str = input_str.replace("\\", "\\\\")
+    input_str = input_str.replace("'", "\\'")
+    input_str = input_str.replace("\n", "\\n")
+    input_str = input_str.replace("\r", "\\r")
+    input_str = input_str.replace("</", "<\\/")
+    return input_str
 
 
 def sanitize(input_str):

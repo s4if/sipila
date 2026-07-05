@@ -63,6 +63,15 @@ def test_change_password_wrong_current(logged_in_client):
     assert b"tidak sesuai" in response.data or b"salah" in response.data
 
 
+def test_change_password_missing_field_does_not_400(logged_in_client):
+    # Field hilang harusnya merender ulang form (200), bukan KeyError/400
+    response = logged_in_client.post(
+        "/admin/ganti_password",
+        data={"current_password": "secret", "new_password": "newsecret123"},
+    )
+    assert response.status_code == 200
+
+
 # ---- Guru CRUD tests ----
 
 
@@ -728,6 +737,100 @@ def test_siswa_data_shows_aman_when_no_ban(logged_in_client, siswa_user):
     response = logged_in_client.get("/admin/siswa/data")
     assert response.status_code == 200
     assert b"Aman" in response.data
+
+
+def _create_student(cg_id, name, student_id="S999"):
+    from werkzeug.security import generate_password_hash
+
+    from app.models import Student
+
+    student = Student(
+        student_id=student_id,
+        name=name,
+        password=generate_password_hash("rahasia"),
+        class_group_id=cg_id,
+    )
+    db.session.add(student)
+    db.session.commit()
+    return student
+
+
+def test_siswa_data_escapes_quote_in_onclick(logged_in_client, app):
+    # Issue 1: nama dengan kutip tunggal tidak boleh memutus string JS
+    with app.app_context():
+        cg_id = _create_class_group()
+        _create_student(cg_id, "O'Brien", student_id="S100")
+
+    response = logged_in_client.get("/admin/siswa/data")
+    assert response.status_code == 200
+    data = response.get_json()
+    actions = [r for r in data["data"] if r["name"] == "O'Brien"][0]["actions"]
+    assert r"O\'Brien" in actions
+    assert "'O'Brien'" not in actions
+
+
+def test_siswa_data_escapes_xss_payload_in_onclick(logged_in_client, app):
+    # Issue 1: payload stored-XSS harus di-escape di atribut onclick
+    with app.app_context():
+        cg_id = _create_class_group()
+        _create_student(cg_id, "');alert(1)//", student_id="S101")
+
+    response = logged_in_client.get("/admin/siswa/data")
+    assert response.status_code == 200
+    data = response.get_json()
+    actions = [
+        r for r in data["data"] if r["name"] == "');alert(1)//"
+    ][0]["actions"]
+    assert r"\');alert(1)//" in actions
+    assert "', '');alert" not in actions
+
+
+def test_guru_data_escapes_quote_in_onclick(logged_in_client, app):
+    # Issue 1: username dengan kutip juga harus di-escape
+    with app.app_context():
+        from app.models import Teacher
+
+        t = Teacher(
+            username="o'brien",
+            password="$2b$12$placeholder",
+            is_superadmin=False,
+        )
+        db.session.add(t)
+        db.session.commit()
+
+    response = logged_in_client.get("/admin/guru/data")
+    assert response.status_code == 200
+    data = response.get_json()
+    actions = [r for r in data["data"] if r["username"] == "o'brien"][0][
+        "actions"
+    ]
+    assert r"o\'brien" in actions
+
+
+def test_siswa_import_validation_renders_br_as_html(logged_in_client, app):
+    # Issue 2: <br> harus ter-render sebagai baris baru, bukan teks mentah
+    with app.app_context():
+        cg_id = _create_class_group()
+
+        buf = _build_xlsx(
+            mode="skip",
+            jumlah_siswa=1,
+            rombel_info=[("X TJKT 1", cg_id)],
+            rows=[
+                ("", "Budi", "pass", cg_id, ""),
+            ],
+        )
+
+    response = logged_in_client.post(
+        "/admin/siswa/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"NIS wajib" in response.data
+    # <br> ter-render sebagai tag HTML, bukan di-escape menjadi &lt;br&gt;
+    assert b"<br>- " in response.data
+    assert b"&lt;br&gt;" not in response.data
 
 
 def test_siswa_tambah_page_get(logged_in_client, app):

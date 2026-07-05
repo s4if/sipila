@@ -7,12 +7,29 @@ from wtforms import (
     StringField,
     TextAreaField,
 )
-from wtforms.validators import DataRequired, Optional
+from wtforms.validators import DataRequired, EqualTo, Optional
 
 
 class LoginForm(FlaskForm):
     username = StringField("Username", validators=[DataRequired()])
     password = PasswordField("Password", validators=[DataRequired()])
+
+
+class GantiPasswordForm(FlaskForm):
+    current_password = PasswordField(
+        "Password Sekarang", validators=[DataRequired()]
+    )
+    new_password = PasswordField("Password Baru", validators=[DataRequired()])
+    confirm_password = PasswordField(
+        "Konfirmasi Password",
+        validators=[
+            DataRequired(),
+            EqualTo(
+                "new_password",
+                message="Konfirmasi password tidak sesuai",
+            ),
+        ],
+    )
 
 
 class SiswaLoginForm(FlaskForm):

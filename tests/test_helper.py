@@ -1,4 +1,4 @@
-from app.helper import sanitize
+from app.helper import js_escape, sanitize
 
 
 class TestSanitizeInput:
@@ -91,6 +91,34 @@ class TestSanitizeInput:
         assert "onclick" not in result
         assert "<p>" in result
         assert "text" in result
+
+
+class TestJsEscape:
+    def test_none_returns_empty(self):
+        assert js_escape(None) == ""
+
+    def test_non_string_is_stringified(self):
+        assert js_escape(123) == "123"
+
+    def test_clean_string_unchanged(self):
+        assert js_escape("hello world") == "hello world"
+
+    def test_escapes_single_quote(self):
+        # Nama seperti O'Brien harus tidak memutus string JS
+        assert js_escape("O'Brien") == "O\\'Brien"
+
+    def test_escapes_backslash(self):
+        assert js_escape("a\\b") == "a\\\\b"
+
+    def test_escapes_xss_payload(self):
+        # Payload stored-XSS yang memutus string JS harus di-escape
+        assert js_escape("');alert(1)//") == "\\');alert(1)//"
+
+    def test_escapes_newlines(self):
+        assert js_escape("a\nb\rc") == "a\\nb\\rc"
+
+    def test_escapes_closing_script_tag(self):
+        assert js_escape("</script>") == "<\\/script>"
 
 
 class TestSuperadminRequired:

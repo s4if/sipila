@@ -1,6 +1,5 @@
-from datetime import datetime, timezone
-
 from app import db
+from app.helper import get_now, get_today
 
 
 class Teacher(db.Model):
@@ -104,7 +103,7 @@ class StudentBan(db.Model):
     end_date = db.Column(db.Date, nullable=False)
     reason = db.Column(db.String(256), nullable=False)
     created_at = db.Column(
-        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+        db.DateTime, nullable=False, default=get_now
     )
 
     student = db.relationship("Student", backref=db.backref("bans", lazy="dynamic"))
@@ -117,16 +116,11 @@ class StudentBan(db.Model):
 
     @property
     def is_active(self):
-        from datetime import date
-
-        today = date.today()
-        return self.start_date <= today <= self.end_date
+        return self.start_date <= get_today() <= self.end_date
 
     @property
     def is_concluded(self):
-        from datetime import date
-
-        return self.end_date < date.today()
+        return self.end_date < get_today()
 
 
 class BorrowingRequest(db.Model):
@@ -147,7 +141,7 @@ class BorrowingRequest(db.Model):
     student_note = db.Column(db.String(256), nullable=True)
     teacher_note = db.Column(db.String(256), nullable=True)
     created_at = db.Column(
-        db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
+        db.DateTime, nullable=False, default=get_now
     )
     reviewed_at = db.Column(db.DateTime, nullable=True)
     confirmation = db.Column(db.String(16), nullable=True)

@@ -88,15 +88,13 @@ def test_siswa_permintaan_tambah_page_get(
 def test_siswa_permintaan_tambah_success(
     app, logged_in_siswa_client, siswa_user, kategori_with_teacher
 ):
-    from datetime import datetime
-
-    from app.helper import WIB
+    from app.helper import get_today
 
     response = logged_in_siswa_client.post(
         "/siswa/permintaan/tambah",
         data={
             "category_id": kategori_with_teacher.id,
-            "date": datetime.now(WIB).date().isoformat(),
+            "date": get_today().isoformat(),
             "student_note": "catatan",
         },
     )
@@ -130,11 +128,9 @@ def test_siswa_permintaan_tambah_duplicate_date(
 def test_siswa_permintaan_tambah_outside_range(
     logged_in_siswa_client, kategori_with_teacher
 ):
-    from datetime import datetime
+    from app.helper import get_today
 
-    from app.helper import WIB
-
-    yesterday = (datetime.now(WIB).date() - timedelta(days=1)).isoformat()
+    yesterday = (get_today() - timedelta(days=1)).isoformat()
     response = logged_in_siswa_client.post(
         "/siswa/permintaan/tambah",
         data={

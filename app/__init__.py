@@ -1,4 +1,11 @@
 import os
+import time
+
+# Pin proses ke WIB sebelum modul lain dipakai, agar date.today() /
+# datetime.now() selalu mengembalikan waktu WIB (lihat helper.get_today()/get_now()).
+os.environ.setdefault("TZ", "Asia/Jakarta")
+if hasattr(time, "tzset"):
+    time.tzset()
 
 import click
 from flask import Flask, redirect, url_for
