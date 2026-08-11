@@ -2,24 +2,45 @@
 
 {% block title %}Login Siswa{% endblock %}
 
-{% from 'macros.jinja' import render_field %}
-
 {% block content %}
-<div class="row">
-	<div class="col d-flex justify-content-center align-items-center">
-		<div class="card rounded-0 mb-3" style="width: 100%; max-width: 720px;">
-            <div class="card-body">
-                <h5 class="card-title">Login Siswa</h5>
-				<form method="POST"
-					action="{{ url_for('auth.login_siswa') }}"
-					hx-boost="false">
-					{{ form.csrf_token }}
-					{{ render_field(form.student_id) }}
-					{{ render_field(form.password) }}
-					<button type="submit" class="btn btn-primary">Submit</button>
-				</form>
-			</div>
+<h2 class="auth-heading">Login Siswa</h2>
+
+<form method="POST"
+      action="{{ url_for('auth.login_siswa') }}"
+      hx-boost="false">
+    {{ form.csrf_token }}
+
+    <div class="auth-field">
+        <label for="{{ form.student_id.id }}">NIS</label>
+        <div class="auth-input-group">
+            <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+            {{ form.student_id(class_='form-control', placeholder='Masukkan NIS', autocomplete='username', **{'aria-label':'NIS'}) }}
         </div>
-	</div>
-</div>
+        {% if form.student_id.errors %}
+        <div class="auth-error-text">
+            {% for err in form.student_id.errors %}{{ err }}{% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="auth-field">
+        <label for="{{ form.password.id }}">Password</label>
+        <div class="auth-input-group">
+            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+            {{ form.password(class_='form-control', id='auth-password', placeholder='Masukkan password', autocomplete='current-password', **{'aria-label':'Password'}) }}
+            <button type="button" class="pw-toggle" data-pw-toggle="auth-password" aria-label="Tampilkan password" tabindex="-1">
+                <i class="bi bi-eye"></i>
+            </button>
+        </div>
+        {% if form.password.errors %}
+        <div class="auth-error-text">
+            {% for err in form.password.errors %}{{ err }}{% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <button type="submit" class="auth-submit">
+        <i class="bi bi-box-arrow-in-right me-1"></i> Masuk
+    </button>
+</form>
 {% endblock %}
