@@ -12,7 +12,8 @@ Sipila is a Flask-based laptop lending management system for SMKIT Ihsanul Fikri
 - **Flask-WTF** + **WTForms** for form handling with CSRF protection
 - **Flask-HTMX** for HTMX integration
 - **Jinja2** templates (`.jinja` extension, NOT `.html`)
-- **Bootstrap 5** + **Bootstrap Icons** + **jQuery** (served as static assets)
+- **Bootstrap 5** + **jQuery** + **DataTables** (static assets); **Bootstrap Icons** via CDN
+- **openpyxl** for XLSX template/import/export (bulk import siswa, laporan monitor)
 - **Gunicorn + Gevent** for production (Docker)
 - **SQLite** (instance folder) for database
 - **pytest + pytest-cov + pytest-xdist** for testing (parallelizable)
@@ -51,94 +52,9 @@ uv run flask --app app delete-admin-user
 docker compose up --build
 ```
 
-## Project Structure
+## Architecture
 
-```
-sipila/
-├── app/                    # Main application package
-│   ├── __init__.py         # create_app() factory, CLI commands, blueprint registration
-│   ├── config.py           # Config class, reads appconfig.toml
-│   ├── db.py               # SQLAlchemy + Migrate init
-│   ├── models.py           # All SQLAlchemy models
-│   ├── auth.py             # Auth blueprint (login/logout)
-│   ├── admin.py            # Admin blueprint (dashboard, CRUD routes)
-│   ├── forms.py            # WTForms form classes
-│   ├── helper.py           # Decorators (login_required, admin_required), sanitize, htmx init
-│   └── templates/          # Jinja2 templates
-│       ├── macros.jinja    # Shared macros (render_field, render_notif)
-│       ├── login/          # Login page templates
-│       └── admin/          # Admin panel templates (layout + pages)
-├── tests/                  # pytest test suite
-│   ├── conftest.py         # Fixtures: app, client, runner, admin_user, logged_in_client
-│   ├── test_auth.py
-│   ├── test_admin.py
-│   ├── test_models.py
-│   └── test_helper.py
-├── migrations/             # Alembic migrations
-├── docker/                 # Docker setup scripts
-├── instance/               # SQLite DB (gitignored)
-├── appconfig.toml          # App-level config (app_name, etc.)
-├── pyproject.toml          # Project metadata, dependencies, pytest config
-└── Dockerfile              # Production Docker image
-```
-
-## Architecture Patterns
-
-### App Factory
-- `create_app(test_config=None)` in `app/__init__.py` — always use the factory pattern
-- Extensions (db, csrf, htmx) are initialized in separate modules and wired via `init_app()`
-
-### Blueprints
-- `auth` (`app/auth.py`): Login/logout routes, no url_prefix
-- `admin` (`app/admin.py`): All admin CRUD routes, `url_prefix='/admin'`
-- New feature areas should be added as separate blueprints
-
-### Models
-- All models in `app/models.py` using Flask-SQLAlchemy declarative base
-- `__tablename__` explicitly set (plural, snake_case)
-- `__repr__` method on every model
-- Foreign keys use `tablename.id` convention
-- Relationships use `backref` or explicit `relationship()`
-
-### Views (Route Handlers)
-- CRUD follows a consistent pattern per entity:
-  - **List**: `GET /entity` — queries all, renders list template
-  - **Add**: `GET/POST /entity/tambah` — GET shows form, POST creates and redirects to list
-  - **Edit**: `GET/POST /entity/edit/<id>` — GET shows form pre-filled, POST updates
-  - **Delete**: `POST /entity/hapus` — soft or hard delete, redirects to list
-- All admin routes use `@admin_required` decorator
-- HTMX responses use `make_response()` with `HX-Push-Url` header for URL updates
-- Notifications passed as `notif` dict with keys `error`, `success`, `info` rendered via `render_notif` macro
-- Templates receive `admin_name`, `is_htmx` as standard context variables
-
-### Templates
-- Use `.jinja` file extension (NOT `.html`)
-- Each section has a `layout.jinja` for the base layout
-- Content pages extend their section's layout via `{% extends %}`
-- Shared macros in `macros.jinja` — import with `{% from 'macros.jinja' import render_field, render_notif %}`
-- HTMX: `hx-boost="true"` on body, `hx-target="#hx_content"` for content swapping
-- CSRF tokens via Flask-WTF (auto-handled in forms)
-
-### Auth & Security
-- Session-based auth: `session['logged_in']`, `session['is_admin']`, `session['admin_name']`
-- Passwords hashed with `werkzeug.security.generate_password_hash` (pbkdf2:sha256, salt_length=16)
-- `admin_required` decorator in `helper.py` protects admin routes
-- `login_required` decorator exists for future student auth
-- CSRF protection enabled globally via Flask-WTF
-- Input sanitization via `sanitize()` in `helper.py`
-
-### Forms
-- WTForms classes in `app/forms.py`
-- Use `FlaskForm` as base class
-- Field names match model attribute names
-
-### Testing
-- Tests in `tests/` directory, auto-discovered via pytest config in `pyproject.toml`
-- `conftest.py` provides fixtures: `app` (in-memory SQLite, CSRF disabled), `client`, `runner`, `admin_user`, `logged_in_client`
-- Test functions are flat (no classes) except for grouped tests (e.g., `TestSanitizeInput`)
-- Test naming: `test_<what>_<condition>` (e.g., `test_login_valid_credentials`)
-- Assertions check status codes, response content, and redirect locations
-- **Parallelization**: use `-n auto` (pytest-xdist) to run across all CPU cores. Safe by default because the `app` fixture is function-scoped with an in-memory SQLite DB per test — no cross-test or cross-worker state is shared. Prefer `-n auto` for fast feedback; drop it (run serial) when collecting coverage, since `pytest-cov` measures more accurately in a single process. Keep new tests isolated (no module-level mutable state, no reliance on test execution order) so they remain parallel-safe.
+The detailed application architecture — project structure, app factory, blueprints, models, views, templates, auth/security, forms, and testing patterns — lives in [ARCHITECTURE.md](./ARCHITECTURE.md). Read it before making structural changes.
 
 ## Conventions
 
@@ -147,7 +63,7 @@ sipila/
 - **No type annotations** in current codebase
 - **Comments**: add simple comments when necessary to clarify non-obvious logic; keep them concise and in Bahasa Indonesia where appropriate
 - **Single quotes** not enforced — both single and double quotes used; be consistent within a file
-- **Template variables**: always pass `admin_name` and `is_htmx` to admin templates
+- **Template variables**: render pages via `hx_render()` in `helper.py` so standard context (`username`, `is_superadmin`, `student_name`, `is_htmx`) is injected automatically; templates read `{{ username }}`, not `admin_name`
 - **Config**: app-level settings in `appconfig.toml`, secrets via environment variables or instance config
 - **Migrations**: tracked in `migrations/` via Flask-Migrate/Alembic
 
