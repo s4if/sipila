@@ -1,10 +1,20 @@
 # isinya decorator untuk fungsi2 tertentu
 
+import base64
 import functools
+import hashlib
 import re
+import secrets
 from datetime import date, datetime
 
-from flask import make_response, redirect, render_template, session, url_for
+from flask import (
+    current_app,
+    make_response,
+    redirect,
+    render_template,
+    session,
+    url_for,
+)
 from flask_htmx import HTMX
 
 htmx = HTMX()
@@ -19,6 +29,39 @@ def get_today():
 def get_now():
     # Satu-satunya sumber "sekarang" di aplikasi. Naive WIB.
     return datetime.now()
+
+
+# --- Captcha login ---
+# Karakter tanpa yang mirip (0/O, 1/I/L) supaya mudah dibaca pengguna.
+_CAPTCHA_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+_CAPTCHA_LENGTH = 5
+
+
+def captcha_enabled():
+    # Bisa dimatikan lewat config, mis. saat testing (lihat Config).
+    return current_app.config.get("LOGIN_CAPTCHA_ENABLED", True)
+
+
+def generate_captcha_text():
+    return "".join(
+        secrets.choice(_CAPTCHA_ALPHABET) for _ in range(_CAPTCHA_LENGTH)
+    )
+
+
+def captcha_hash(text):
+    # Disimpan sebagai hash di session agar jawaban tidak terbaca dari cookie
+    # (session Flask = cookie yang ditandatangani, bukan dienkripsi).
+    # Normalisasi ke uppercase sehingga pencocokan case-insensitive.
+    return hashlib.sha256(text.strip().upper().encode("utf-8")).hexdigest()
+
+
+def captcha_image_base64(text):
+    # Hasilkan gambar captcha sebagai string base64 (untuk <img src="...">).
+    from captcha.image import ImageCaptcha
+
+    image = ImageCaptcha()
+    data = image.generate(text)
+    return base64.b64encode(data.read()).decode("ascii")
 
 
 def login_required(view):

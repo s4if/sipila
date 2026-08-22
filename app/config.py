@@ -16,6 +16,9 @@ class Config(object):
         "DATABASE_URL"
     ) or "sqlite:///" + os.path.join(instancedir, "app.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Captcha gambar di halaman login (admin & siswa). Bisa dimatikan, mis.
+    # saat testing, seperti WTF_CSRF_ENABLED.
+    LOGIN_CAPTCHA_ENABLED = True
 
 
 tomlfile = os.path.join(basedir, "../appconfig.toml")

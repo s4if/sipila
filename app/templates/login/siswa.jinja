@@ -39,6 +39,29 @@
         {% endif %}
     </div>
 
+    {% if captcha_img %}
+    <div class="auth-field">
+        <label for="{{ form.captcha.id }}">Kode Keamanan</label>
+        <div class="auth-captcha-row">
+            <div class="auth-input-group">
+                <span class="input-group-text"><i class="bi bi-shield-lock"></i></span>
+                {{ form.captcha(class_='form-control', placeholder='Masukkan kode', autocomplete='off', inputmode='text', **{'aria-label':'Kode keamanan'}) }}
+            </div>
+            <div id="captcha-image" class="auth-captcha-img">
+                <img class="captcha-img" alt="Kode keamanan" src="data:image/png;base64,{{ captcha_img }}">
+            </div>
+            <button type="button" class="captcha-refresh" hx-get="{{ url_for('auth.captcha') }}" hx-target="#captcha-image" hx-swap="innerHTML" aria-label="Segarkan kode keamanan" tabindex="-1">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+        {% if form.captcha.errors %}
+        <div class="auth-error-text">
+            {% for err in form.captcha.errors %}{{ err }}{% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <button type="submit" class="auth-submit">
         <i class="bi bi-box-arrow-in-right me-1"></i> Masuk
     </button>

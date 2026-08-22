@@ -13,6 +13,7 @@ from wtforms.validators import DataRequired, EqualTo, Optional
 class LoginForm(FlaskForm):
     username = StringField("Username", validators=[DataRequired()])
     password = PasswordField("Password", validators=[DataRequired()])
+    captcha = StringField("Kode Keamanan", validators=[DataRequired()])
 
 
 class GantiPasswordForm(FlaskForm):
@@ -35,6 +36,7 @@ class GantiPasswordForm(FlaskForm):
 class SiswaLoginForm(FlaskForm):
     student_id = StringField("NIS", validators=[DataRequired()])
     password = PasswordField("Password", validators=[DataRequired()])
+    captcha = StringField("Kode Keamanan", validators=[DataRequired()])
 
 
 class PermintaanSiswaForm(FlaskForm):
