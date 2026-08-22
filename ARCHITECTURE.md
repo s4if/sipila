@@ -9,7 +9,7 @@ sipila/
 ├── app/                        # Main application package
 │   ├── __init__.py             # create_app() factory, TZ pinning (WIB), CLI commands, blueprint registration
 │   ├── config.py               # Config class + APP_CONFIG (appconfig.toml), env overrides for secrets/DB
-│   ├── db.py                   # SQLAlchemy + Migrate init
+│   ├── db.py                   # SQLAlchemy + Migrate init + PRAGMA SQLite (WAL) listener
 │   ├── models.py               # All SQLAlchemy models
 │   ├── helper.py               # Role decorators, hx_render, sanitize/js_escape, get_today/get_now, htmx init
 │   ├── forms.py                # WTForms form classes
@@ -42,6 +42,13 @@ sipila/
 - **Timezone pinning**: at import time the process is pinned to `Asia/Jakarta` via `os.environ.setdefault("TZ", "Asia/Jakarta")` + `time.tzset()`, so `date.today()` / `datetime.now()` always return WIB wall-clock. The same pinning is mirrored in `Dockerfile` and `docker-compose.yml` — see [DEPLOYMENT.md](./DEPLOYMENT.md) for the full strategy.
 - Extensions (`db`/`migrate`, `csrf`, `htmx`) initialized in separate modules, wired via `init_app()`.
 - Context processor injects `app_name` from `APP_CONFIG` (loaded from `appconfig.toml` in `config.py`).
+
+## SQLite Tuning (WAL & gevent)
+
+- `app/db.py` sets PRAGMAs on every new sqlite3 connection: `journal_mode=WAL`, `synchronous=FULL` (safest durability, small write penalty), `busy_timeout=10000` (wait instead of instant `database is locked` errors across gunicorn workers).
+- `SQLALCHEMY_ENGINE_OPTIONS` in `config.py` uses `NullPool` + `check_same_thread=False` + `timeout=15` — the safe pooling setup for gunicorn **gevent** workers (no connection reuse across greenlets/fork).
+- WAL is persistent in the DB header; backups must include `app.db-wal`/`app.db-shm` or use `sqlite3 app.db ".backup '..."` (SQLite-aware copy).
+- In-memory test DBs are unaffected: Flask-SQLAlchemy forces `StaticPool` for `:memory:`.
 - Root `/` redirects to `auth.login_admin`.
 - CLI commands (`add-admin-user`, `change-admin-user`, `delete-admin-user`): each takes `--username/--password/--role` (admin|superadmin); passwords hashed with pbkdf2:sha256, `salt_length=16`.
 

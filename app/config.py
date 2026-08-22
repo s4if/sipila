@@ -1,6 +1,8 @@
 import os
 import tomllib
 
+from sqlalchemy.pool import NullPool
+
 basedir = os.path.abspath(os.path.dirname(__file__))
 instancedir = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "../instance/")
@@ -16,6 +18,20 @@ class Config(object):
         "DATABASE_URL"
     ) or "sqlite:///" + os.path.join(instancedir, "app.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Aman untuk gunicorn + gevent: koneksi SQLite tidak dipakai ulang
+    # lintas greenlet/thread/fork (NullPool), dan boleh berpindah greenlet
+    # (check_same_thread=False) karena SQLAlchemy menjamin satu koneksi
+    # hanya dipakai satu request pada satu waktu.
+    # Untuk SQLite in-memory (testing), Flask-SQLAlchemy tetap memaksa
+    # StaticPool sehingga fixture tes tidak terpengaruh.
+    SQLALCHEMY_ENGINE_OPTIONS = {
+        "poolclass": NullPool,
+        "connect_args": {
+            "check_same_thread": False,
+            # Tunggu sampai 15 detik saat file terkunci sebelum error
+            "timeout": 15,
+        },
+    }
     # Captcha gambar di halaman login (admin & siswa). Bisa dimatikan, mis.
     # saat testing, seperti WTF_CSRF_ENABLED.
     LOGIN_CAPTCHA_ENABLED = True
