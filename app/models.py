@@ -8,6 +8,9 @@ class Teacher(db.Model):
     username = db.Column(db.String(64), index=True, unique=True)
     password = db.Column(db.String(128))
     is_superadmin = db.Column(db.Boolean, nullable=False, default=False)
+    # Soft delete: guru terhapus tetap tersimpan (riwayat review/larangan
+    # tetap merujuk id-nya) tapi tidak bisa login dan tidak muncul di UI.
+    is_deleted = db.Column(db.Boolean, nullable=False, default=False)
     name = db.Column(db.String(128))
     contact_person = db.Column(db.String(20))
 
@@ -21,7 +24,9 @@ class ClassGroup(db.Model):
     name = db.Column(db.String(16), nullable=False)
     grade_level = db.Column(db.String(8), nullable=False)
     major = db.Column(db.String(64))
-    homeroom_teacher_id = db.Column(db.Integer, db.ForeignKey("teachers.id"))
+    homeroom_teacher_id = db.Column(
+        db.Integer, db.ForeignKey("teachers.id")
+    )
 
     homeroom_teacher = db.relationship("Teacher", backref="class_groups")
     students = db.relationship("Student", backref="class_group", lazy="select")
@@ -48,7 +53,9 @@ class Student(db.Model):
     student_id = db.Column(db.String(32), index=True, unique=True)
     name = db.Column(db.String(128))
     password = db.Column(db.String(128))
-    class_group_id = db.Column(db.Integer, db.ForeignKey("class_groups.id"))
+    class_group_id = db.Column(
+        db.Integer, db.ForeignKey("class_groups.id"), index=True
+    )
     is_deleted = db.Column(db.Boolean, nullable=False, default=False)
     admin_note = db.Column(db.String(256))
 
@@ -60,6 +67,9 @@ class Category(db.Model):
     __tablename__ = "categories"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False, unique=True)
+    # Soft delete: saat dihapus, name diganti "[deleted]" dan link guru
+    # pengawas dibersihkan; riwayat permintaan tetap merujuk row ini.
+    is_deleted = db.Column(db.Boolean, nullable=False, default=False)
 
     teacher_links = db.relationship(
         "CategoryTeacher",
@@ -80,7 +90,7 @@ class CategoryTeacher(db.Model):
         db.Integer, db.ForeignKey("categories.id"), nullable=False
     )
     teacher_id = db.Column(
-        db.Integer, db.ForeignKey("teachers.id"), nullable=False
+        db.Integer, db.ForeignKey("teachers.id"), nullable=False, index=True
     )
 
     def __repr__(self):
@@ -94,7 +104,10 @@ class StudentBan(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(
-        db.Integer, db.ForeignKey("students.id"), nullable=False
+        db.Integer,
+        db.ForeignKey("students.id"),
+        nullable=False,
+        index=True,
     )
     creator_id = db.Column(
         db.Integer, db.ForeignKey("teachers.id"), nullable=False
@@ -130,10 +143,16 @@ class LoanPeriod(db.Model):
     __tablename__ = "loan_periods"
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(
-        db.Integer, db.ForeignKey("students.id"), nullable=False
+        db.Integer,
+        db.ForeignKey("students.id"),
+        nullable=False,
+        index=True,
     )
     category_id = db.Column(
-        db.Integer, db.ForeignKey("categories.id"), nullable=False
+        db.Integer,
+        db.ForeignKey("categories.id"),
+        nullable=False,
+        index=True,
     )
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
@@ -193,8 +212,10 @@ class BorrowingRequest(db.Model):
         db.ForeignKey("loan_periods.id", ondelete="SET NULL"),
         nullable=True,
     )
-    date = db.Column(db.Date, nullable=False)
-    status = db.Column(db.String(16), nullable=False, default="pending")
+    date = db.Column(db.Date, nullable=False, index=True)
+    status = db.Column(
+        db.String(16), nullable=False, default="pending", index=True
+    )
     reviewed_by = db.Column(
         db.Integer, db.ForeignKey("teachers.id"), nullable=True
     )

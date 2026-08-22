@@ -112,7 +112,12 @@ def create_app(test_config=None):
         if admin_user is None:
             print(f"Admin user '{username}' not found!")
         else:
-            db.session.delete(admin_user)
+            # Soft delete agar riwayat yang merujuk guru ini tetap utuh;
+            # username ditandai supaya bisa dipakai ulang.
+            admin_user.is_deleted = True
+            admin_user.username = (
+                f"{admin_user.username}#deleted#{admin_user.id}"
+            )
             db.session.commit()
             print(f"Admin user '{username}' deleted!")
 

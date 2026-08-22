@@ -41,6 +41,27 @@ def test_login_wrong_password(client, admin_user):
     )
 
 
+def test_login_deleted_teacher(client, app, admin_user):
+    from app import db
+
+    with app.app_context():
+        admin_user.is_deleted = True
+        db.session.commit()
+
+    response = client.post(
+        "/login/admin",
+        data={
+            "username": "admin",
+            "password": "secret",
+        },
+    )
+    assert response.status_code == 200
+    assert (
+        b"invalid" in response.data.lower()
+        or b"salah" in response.data.lower()
+    )
+
+
 def test_login_nonexistent_user(client):
     response = client.post(
         "/login/admin",

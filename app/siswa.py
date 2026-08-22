@@ -114,7 +114,10 @@ def permintaan_tambah():
     min_date, max_date = _date_range()
     form = PermintaanSiswaForm()
     form.category_id.choices = [
-        (c.id, c.name) for c in Category.query.order_by(Category.name).all()
+        (c.id, c.name)
+        for c in Category.query.filter_by(is_deleted=False)
+        .order_by(Category.name)
+        .all()
     ]
     if request.method == "GET":
         return hx_render(
@@ -221,7 +224,10 @@ def permintaan_edit(id):
 
     form = PermintaanSiswaForm(obj=req)
     form.category_id.choices = [
-        (c.id, c.name) for c in Category.query.order_by(Category.name).all()
+        (c.id, c.name)
+        for c in Category.query.filter_by(is_deleted=False)
+        .order_by(Category.name)
+        .all()
     ]
     if request.method == "GET":
         form.date.data = req.date

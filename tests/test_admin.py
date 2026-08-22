@@ -243,6 +243,107 @@ def test_guru_hapus_success(logged_in_client, app):
     assert response.status_code == 200
     assert b"berhasil dihapus" in response.data
 
+    # Soft delete: row tetap ada, ditandai terhapus, username ditandai
+    # supaya bisa dipakai guru baru.
+    with app.app_context():
+        deleted = db.session.get(Teacher, guru_id)
+        assert deleted is not None
+        assert deleted.is_deleted is True
+        assert deleted.username.startswith("hapus_guru#deleted#")
+
+
+def test_guru_hapus_with_history_preserves_rows(
+    logged_in_client, app, siswa_user
+):
+    # Dulu: hapus guru yang punya larangan memicu IntegrityError (500).
+    # Sekarang: soft delete, riwayat tetap utuh.
+    from datetime import date
+
+    from werkzeug.security import generate_password_hash
+
+    from app import db
+    from app.models import StudentBan, Teacher
+
+    with app.app_context():
+        guru = Teacher(
+            username="guru_sejarah",
+            password=generate_password_hash("pass"),
+        )
+        db.session.add(guru)
+        db.session.flush()
+        ban = StudentBan(
+            student_id=siswa_user.id,
+            creator_id=guru.id,
+            start_date=date.today(),
+            end_date=date.today(),
+            reason="riwayat",
+        )
+        db.session.add(ban)
+        db.session.commit()
+        guru_id, ban_id = guru.id, ban.id
+
+    response = logged_in_client.post("/admin/guru/hapus", data={"id": guru_id})
+    assert response.status_code == 200
+
+    with app.app_context():
+        assert db.session.get(StudentBan, ban_id) is not None
+        assert db.session.get(Teacher, guru_id).is_deleted is True
+
+
+def test_guru_data_excludes_deleted(logged_in_client, app, admin_user):
+    from app import db
+    from app.models import Teacher
+
+    with app.app_context():
+        db.session.add(Teacher(username="ghost", is_deleted=True))
+        db.session.commit()
+
+    response = logged_in_client.get("/admin/guru/data")
+    assert response.status_code == 200
+    usernames = [row["username"] for row in response.json["data"]]
+    assert "ghost" not in usernames
+    assert "admin" in usernames
+
+
+def test_guru_tambah_reuses_username_of_deleted_guru(logged_in_client, app):
+    # Username guru terhapus dikembalikan ke kolam nama yang bisa dipakai.
+    from werkzeug.security import generate_password_hash
+
+    from app import db
+    from app.models import Teacher
+
+    with app.app_context():
+        guru = Teacher(
+            username="diganti",
+            password=generate_password_hash("pass"),
+        )
+        db.session.add(guru)
+        db.session.commit()
+        guru_id = guru.id
+
+    response = logged_in_client.post("/admin/guru/hapus", data={"id": guru_id})
+    assert response.status_code == 200
+
+    response = logged_in_client.post(
+        "/admin/guru/tambah",
+        data={
+            "username": "diganti",
+            "name": "Pengganti",
+            "contact_person": "",
+            "password": "passbaru",
+        },
+    )
+    assert response.status_code == 200
+    assert b"berhasil ditambahkan" in response.data
+
+    with app.app_context():
+        assert (
+            Teacher.query.filter_by(
+                username="diganti", is_deleted=False
+            ).count()
+            == 1
+        )
+
 
 def test_guru_hapus_self_blocked(logged_in_client, admin_user):
     response = logged_in_client.post(

@@ -167,7 +167,9 @@ def rombel_tambah():
     form = RombelForm()
     form.homeroom_teacher_id.choices = [("", "Belum ditentukan")] + [
         (a.id, a.name or "[nama belum di set]")
-        for a in Teacher.query.order_by(Teacher.username).all()
+        for a in Teacher.query.filter_by(is_deleted=False)
+        .order_by(Teacher.username)
+        .all()
     ]
     if request.method == "GET":
         return hx_render("admin/rombel_form.jinja", class_group=None, form=form)
@@ -195,7 +197,9 @@ def rombel_edit(id):
     form = RombelForm(obj=class_group)
     form.homeroom_teacher_id.choices = [("", "Belum ditentukan")] + [
         (a.id, a.name or "[nama belum di set]")
-        for a in Teacher.query.order_by(Teacher.username).all()
+        for a in Teacher.query.filter_by(is_deleted=False)
+        .order_by(Teacher.username)
+        .all()
     ]
     if request.method == "GET":
         return hx_render(
@@ -940,13 +944,19 @@ def siswa_detail_export(id):
 
 def _populate_period_category_choices(form, teacher, period=None):
     # Superadmin boleh semua kategori; guru biasa hanya kategori yang diawasnya
+    # (kategori yang sudah dihapus tidak pernah ditawarkan)
     if session.get("is_superadmin", False):
-        categories = Category.query.order_by(Category.id).all()
+        categories = (
+            Category.query.filter_by(is_deleted=False).order_by(Category.id).all()
+        )
     else:
         category_ids = _get_teacher_category_ids(teacher.id)
         if category_ids:
             categories = (
-                Category.query.filter(Category.id.in_(category_ids))
+                Category.query.filter(
+                    Category.id.in_(category_ids),
+                    Category.is_deleted.is_(False),
+                )
                 .order_by(Category.id)
                 .all()
             )
@@ -956,8 +966,13 @@ def _populate_period_category_choices(form, teacher, period=None):
         (c.id, c.name) for c in categories
     ]
     # Saat edit, pastikan kategori saat ini tetap bisa dipilih walau sang
-    # pembuat sudah tidak lagi mengawasi kategori tersebut
-    if period is not None and period.category is not None:
+    # pembuat sudah tidak lagi mengawasi kategori tersebut — kecuali
+    # kategorinya sudah dihapus (soft delete).
+    if (
+        period is not None
+        and period.category is not None
+        and not period.category.is_deleted
+    ):
         if period.category_id not in [c.id for c in categories]:
             form.category_id.choices.append(
                 (period.category_id, period.category.name)
@@ -1460,7 +1475,9 @@ def guru():
 @bp.route("/guru/data")
 @superadmin_required
 def guru_data():
-    admins = Teacher.query.order_by(Teacher.id).all()
+    admins = (
+        Teacher.query.filter_by(is_deleted=False).order_by(Teacher.id).all()
+    )
     data = []
     for i, a in enumerate(admins, 1):
         role = "Superadmin" if a.is_superadmin else "Admin"
@@ -1521,7 +1538,7 @@ def guru_tambah():
 @bp.route("/guru/edit/<int:id>", methods=["GET", "POST"])
 @superadmin_required
 def guru_edit(id):
-    admin = db.get_or_404(Teacher, id)
+    admin = Teacher.query.filter_by(id=id, is_deleted=False).first_or_404()
     form = GuruForm(obj=admin)
     if request.method == "GET":
         return hx_render("admin/guru_form.jinja", guru=admin, form=form)
@@ -1561,7 +1578,11 @@ def guru_hapus():
     if admin.username == session["admin_name"]:
         notif["error"] = "Tidak dapat menghapus akun yang sedang digunakan"
     else:
-        db.session.delete(admin)
+        # Soft delete: username ditandai supaya bisa dipakai guru baru,
+        # riwayat (review, larangan, pinjaman periode) tetap tersimpan
+        # dan menunjuk id guru yang sama.
+        admin.is_deleted = True
+        admin.username = "{}#deleted#{}".format(admin.username, admin.id)
         db.session.commit()
         notif["success"] = "Guru berhasil dihapus"
     return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
@@ -1730,7 +1751,9 @@ def guru_import():
 def _populate_kategori_teacher_choices(form):
     form.teachers.choices = [
         (t.id, t.name or t.username)
-        for t in Teacher.query.order_by(Teacher.username).all()
+        for t in Teacher.query.filter_by(is_deleted=False)
+        .order_by(Teacher.username)
+        .all()
     ]
 
 
@@ -1747,6 +1770,7 @@ def kategori_data():
 
     categories = (
         Category.query.options(joinedload(Category.teacher_links))
+        .filter_by(is_deleted=False)
         .order_by(Category.id)
         .all()
     )
@@ -1819,7 +1843,9 @@ def kategori_tambah():
 @bp.route("/kategori/edit/<int:id>", methods=["GET", "POST"])
 @superadmin_required
 def kategori_edit(id):
-    category = db.get_or_404(Category, id)
+    category = Category.query.filter_by(
+        id=id, is_deleted=False
+    ).first_or_404()
     form = KategoriForm(obj=category)
     _populate_kategori_teacher_choices(form)
     if request.method == "GET":
@@ -1860,7 +1886,26 @@ def kategori_edit(id):
 def kategori_hapus():
     id = request.form.get("id", type=int)
     category = db.get_or_404(Category, id)
-    db.session.delete(category)
+    # Soft delete: name diganti "[deleted]" (diakhiri id bila nama itu
+    # sudah dipakai kategori terhapus lain), link guru pengawas dibersihkan,
+    # dan LoanPeriod aktif dinonaktifkan supaya cron berhenti
+    # memmaterialisasi request untuk kategori yang sudah tidak ada.
+    # Riwayat permintaan lama tetap merujuk row ini.
+    category.is_deleted = True
+    new_name = "[deleted]"
+    if (
+        Category.query.filter(
+            Category.name == new_name, Category.id != id
+        ).first()
+        is not None
+    ):
+        new_name = "[deleted] {}".format(id)
+    category.name = new_name
+    CategoryTeacher.query.filter_by(category_id=id).delete()
+    LoanPeriod.query.filter_by(category_id=id, is_active=True).update(
+        {LoanPeriod.is_active: False, LoanPeriod.cancelled_at: get_now()},
+        synchronize_session=False,
+    )
     db.session.commit()
     notif = {"success": "Kategori berhasil dihapus"}
     return hx_render("admin/kategori.jinja", push_url="admin.kategori", **notif)
