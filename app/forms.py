@@ -107,6 +107,22 @@ class StudentBanForm(FlaskForm):
     reason = StringField("Alasan", validators=[DataRequired()])
 
 
+class PinjamanPeriodeForm(FlaskForm):
+    # Form pemberian pinjaman multi-hari oleh guru (LoanPeriod)
+    category_id = SelectField(
+        "Kategori",
+        coerce=lambda x: int(x) if x else None,
+        validators=[DataRequired()],
+    )
+    start_date = DateField(
+        "Tanggal Mulai", validators=[DataRequired()], format="%Y-%m-%d"
+    )
+    end_date = DateField(
+        "Tanggal Selesai", validators=[DataRequired()], format="%Y-%m-%d"
+    )
+    note = StringField("Catatan", validators=[Optional()])
+
+
 class KategoriForm(FlaskForm):
     name = StringField("Nama Kategori", validators=[DataRequired()])
     teachers = SelectMultipleField(

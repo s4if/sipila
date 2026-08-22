@@ -1,0 +1,90 @@
+{% if not is_htmx %}
+    {% extends "admin/layout.jinja" %}
+    {% block title %}Tambah Pinjaman Periode{% endblock %}
+{% else %}
+    <title>Tambah Pinjaman Periode</title>
+{% endif %}
+
+{% from 'macros.jinja' import render_notif %}
+
+{% block content %}
+
+{{ render_notif(error, success, info) }}
+
+<h4 class="mb-3">Tambah Pinjaman Periode</h4>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <span class="fw-semibold">{{ student.name }}</span>
+        <span class="text-muted">({{ student.student_id }})</span>
+        {% if student.class_group %}
+        <span class="text-muted"> &mdash; {{ student.class_group.display_name }}</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col">
+        <form method="POST"
+              action="{{ url_for('admin.pinjaman_periode_tambah', id=student.id) }}"
+              hx-post="{{ url_for('admin.pinjaman_periode_tambah', id=student.id) }}"
+              hx-target="#hx_content"
+              hx-swap="innerHTML">
+            {{ form.hidden_tag() }}
+            <div class="mb-3">
+                {{ form.category_id.label(class='form-label') }}
+                {{ form.category_id(class='form-select' + (' is-invalid' if form.category_id.errors else ''), required=True) }}
+                {% if form.category_id.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.category_id.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.start_date.label(class='form-label') }}
+                {{ form.start_date(class='form-control' + (' is-invalid' if form.start_date.errors else ''), type='date', required=True) }}
+                {% if form.start_date.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.start_date.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.end_date.label(class='form-label') }}
+                {{ form.end_date(class='form-control' + (' is-invalid' if form.end_date.errors else ''), type='date', required=True) }}
+                {% if form.end_date.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.end_date.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="mb-3">
+                {{ form.note.label(class='form-label') }}
+                {{ form.note(class='form-control' + (' is-invalid' if form.note.errors else '')) }}
+                {% if form.note.errors %}
+                <div class="invalid-feedback">
+                    {% for error in form.note.errors %}{{ error }}{% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="form-text mb-3">
+                <i class="bi bi-info-circle"></i>
+                Permintaan peminjaman harian dibuat otomatis oleh sistem setiap
+                hari selama rentang periode. Hari ketika siswa sedang dalam
+                masa larangan akan dilewati.
+            </div>
+            <div class="mb-3">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-calendar-week"></i> Tambah Pinjaman Periode
+                </button>
+                <a class="btn btn-secondary ms-2"
+                   href="{{ url_for('admin.siswa_detail', id=student.id) }}"
+                   hx-get="{{ url_for('admin.siswa_detail', id=student.id) }}"
+                   hx-target="#hx_content"
+                   hx-swap="innerHTML">Batal</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

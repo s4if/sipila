@@ -123,6 +123,54 @@ class StudentBan(db.Model):
         return self.end_date < get_today()
 
 
+class LoanPeriod(db.Model):
+    # Pinjaman jangka panjang yang diberikan guru. Row BorrowingRequest
+    # harian di-generate malas (lazy) dari sini, satu per satu saat
+    # tanggalnya tiba (lihat app/periods.py).
+    __tablename__ = "loan_periods"
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(
+        db.Integer, db.ForeignKey("students.id"), nullable=False
+    )
+    category_id = db.Column(
+        db.Integer, db.ForeignKey("categories.id"), nullable=False
+    )
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    note = db.Column(db.String(256), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey("teachers.id"), nullable=False
+    )
+    created_at = db.Column(
+        db.DateTime, nullable=False, default=get_now
+    )
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+
+    student = db.relationship("Student", backref="loan_periods")
+    category = db.relationship("Category", backref="loan_periods")
+    creator = db.relationship("Teacher", backref="loan_periods")
+    requests = db.relationship(
+        "BorrowingRequest", backref="loan_period", lazy="dynamic"
+    )
+
+    def __repr__(self):
+        return "<LoanPeriod student={} {} s/d {} active={}>".format(
+            self.student_id, self.start_date, self.end_date, self.is_active
+        )
+
+    @property
+    def status_label(self):
+        # Dipakai template untuk badge: active/upcoming/concluded/cancelled
+        if not self.is_active:
+            return "cancelled"
+        if self.end_date < get_today():
+            return "concluded"
+        if self.start_date > get_today():
+            return "upcoming"
+        return "active"
+
+
 class BorrowingRequest(db.Model):
     __tablename__ = "borrowing_requests"
     __table_args__ = (db.UniqueConstraint("student_id", "date"),)
@@ -132,6 +180,10 @@ class BorrowingRequest(db.Model):
     )
     category_id = db.Column(
         db.Integer, db.ForeignKey("categories.id"), nullable=False
+    )
+    # Terisi jika row ini digenerate dari LoanPeriod (pinjaman periode)
+    loan_period_id = db.Column(
+        db.Integer, db.ForeignKey("loan_periods.id"), nullable=True
     )
     date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(16), nullable=False, default="pending")

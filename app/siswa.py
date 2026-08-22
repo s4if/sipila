@@ -6,6 +6,7 @@ from .db import db
 from .forms import PermintaanSiswaForm
 from .helper import get_today, hx_render, login_required, sanitize
 from .models import BorrowingRequest, Category, StudentBan
+from .periods import get_active_period_for
 
 bp = Blueprint("siswa", __name__, url_prefix="/siswa")
 
@@ -163,6 +164,24 @@ def permintaan_tambah():
             **notif,
         )
 
+    period = get_active_period_for(student_db_id, form.date.data)
+    if period:
+        notif["error"] = (
+            "Tanggal tersebut sudah tercakup pinjaman periode {} s/d {} "
+            "yang diberikan guru".format(
+                period.start_date.strftime("%d/%m/%Y"),
+                period.end_date.strftime("%d/%m/%Y"),
+            )
+        )
+        return hx_render(
+            "siswa/permintaan_form.jinja",
+            form=form,
+            req=None,
+            min_date=min_date.isoformat(),
+            max_date=max_date.isoformat(),
+            **notif,
+        )
+
     req = BorrowingRequest(
         student_id=student_db_id,
         category_id=form.category_id.data,
@@ -248,6 +267,24 @@ def permintaan_edit(id):
     if existing:
         notif["error"] = (
             "Anda sudah mengajukan permintaan untuk tanggal tersebut"
+        )
+        return hx_render(
+            "siswa/permintaan_form.jinja",
+            form=form,
+            req=req,
+            min_date=min_date.isoformat(),
+            max_date=max_date.isoformat(),
+            **notif,
+        )
+
+    period = get_active_period_for(student_db_id, form.date.data)
+    if period and period.id != getattr(req, "loan_period_id", None):
+        notif["error"] = (
+            "Tanggal tersebut sudah tercakup pinjaman periode {} s/d {} "
+            "yang diberikan guru".format(
+                period.start_date.strftime("%d/%m/%Y"),
+                period.end_date.strftime("%d/%m/%Y"),
+            )
         )
         return hx_render(
             "siswa/permintaan_form.jinja",

@@ -9,6 +9,7 @@ from .forms import (
     GantiPasswordForm,
     GuruForm,
     KategoriForm,
+    PinjamanPeriodeForm,
     RombelForm,
     SiswaForm,
     StudentBanForm,
@@ -27,6 +28,7 @@ from .models import (
     Category,
     CategoryTeacher,
     ClassGroup,
+    LoanPeriod,
     Student,
     StudentBan,
     Teacher,
@@ -51,6 +53,15 @@ def _build_siswa_detail_context(student_id):
     rejected = base_query.filter_by(status="rejected").count()
     pending = base_query.filter_by(status="pending").count()
 
+    loan_periods = (
+        LoanPeriod.query.options(
+            joinedload(LoanPeriod.category), joinedload(LoanPeriod.creator)
+        )
+        .filter_by(student_id=student.id)
+        .order_by(LoanPeriod.created_at.desc(), LoanPeriod.id.desc())
+        .all()
+    )
+
     bans = (
         StudentBan.query.options(joinedload(StudentBan.creator))
         .filter_by(student_id=student.id)
@@ -65,6 +76,7 @@ def _build_siswa_detail_context(student_id):
         "accepted_requests": accepted,
         "rejected_requests": rejected,
         "pending_requests": pending,
+        "loan_periods": loan_periods,
         "bans": bans,
         "has_active_ban": has_active_ban,
     }
@@ -930,6 +942,137 @@ def siswa_detail_export(id):
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         as_attachment=True,
         download_name=download_name,
+    )
+
+
+# ---- Pinjaman Periode (LoanPeriod, peminjaman multi-hari oleh guru) ----
+
+
+def _populate_period_category_choices(form, teacher):
+    # Superadmin boleh semua kategori; guru biasa hanya kategori yang diawasnya
+    if session.get("is_superadmin", False):
+        categories = Category.query.order_by(Category.id).all()
+    else:
+        category_ids = _get_teacher_category_ids(teacher.id)
+        if category_ids:
+            categories = (
+                Category.query.filter(Category.id.in_(category_ids))
+                .order_by(Category.id)
+                .all()
+            )
+        else:
+            categories = []
+    form.category_id.choices = [("", "Pilih kategori")] + [
+        (c.id, c.name) for c in categories
+    ]
+
+
+@bp.route("/siswa/<int:id>/pinjaman-periode/tambah", methods=["GET", "POST"])
+@admin_required
+def pinjaman_periode_tambah(id):
+    from .periods import materialize_periods
+
+    student = db.get_or_404(Student, id)
+    teacher = _get_current_teacher()
+    form = PinjamanPeriodeForm()
+    _populate_period_category_choices(form, teacher)
+
+    ctx = {"student": student, "form": form}
+    if request.method == "GET":
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx)
+
+    notif = {}
+    if not form.validate_on_submit():
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx)
+
+    today = get_today()
+    if form.start_date.data > form.end_date.data:
+        notif["error"] = (
+            "Tanggal mulai tidak boleh lebih besar dari tanggal selesai"
+        )
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx, **notif)
+
+    if form.start_date.data < today:
+        notif["error"] = "Tanggal mulai tidak boleh di masa lalu"
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx, **notif)
+
+    overlap = LoanPeriod.query.filter(
+        LoanPeriod.student_id == student.id,
+        LoanPeriod.is_active.is_(True),
+        LoanPeriod.start_date <= form.end_date.data,
+        LoanPeriod.end_date >= form.start_date.data,
+    ).first()
+    if overlap:
+        notif["error"] = (
+            "Siswa sudah memiliki pinjaman periode aktif yang beririsan "
+            "dengan rentang tanggal ini ({} s/d {})".format(
+                overlap.start_date.strftime("%d/%m/%Y"),
+                overlap.end_date.strftime("%d/%m/%Y"),
+            )
+        )
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx, **notif)
+
+    period = LoanPeriod(
+        student_id=student.id,
+        category_id=form.category_id.data,
+        start_date=form.start_date.data,
+        end_date=form.end_date.data,
+        note=sanitize(form.note.data) or None,
+        created_by=teacher.id,
+    )
+    db.session.add(period)
+    db.session.commit()
+
+    # Jika rentang sudah mencakup hari ini, buat row hari ini sekarang
+    # juga — cron hanya jalan sekali sehari sehingga bisa terlewat dari
+    # jam pembuatan sampai jadwal cron berikutnya.
+    if period.start_date <= today <= period.end_date:
+        materialize_periods(today)
+
+    notif["success"] = (
+        "Pinjaman periode berhasil ditambahkan. Permintaan harian akan "
+        "dibuat otomatis setiap hari oleh sistem."
+    )
+    context = _build_siswa_detail_context(student.id)
+    return hx_render(
+        "admin/siswa_detail.jinja",
+        push_url=url_for("admin.siswa_detail", id=student.id),
+        **context,
+        **notif,
+    )
+
+
+@bp.route("/pinjaman-periode/batalkan/<int:period_id>", methods=["POST"])
+@admin_required
+def pinjaman_periode_batalkan(period_id):
+    period = db.get_or_404(LoanPeriod, period_id)
+    notif = {}
+
+    # Hanya superadmin atau guru pembuat yang boleh membatalkan
+    can_manage = session.get("is_superadmin", False) or (
+        period.creator is not None
+        and session.get("admin_name") == period.creator.username
+    )
+    if not can_manage:
+        notif["error"] = "Anda tidak berwenang membatalkan pinjaman periode ini"
+    elif not period.is_active:
+        notif["error"] = "Pinjaman periode sudah tidak aktif"
+    else:
+        period.is_active = False
+        period.cancelled_at = get_now()
+        db.session.commit()
+        notif["success"] = (
+            "Pinjaman periode berhasil dibatalkan. Permintaan untuk hari "
+            "ini dan seterusnya tidak akan dibuat lagi; riwayat hari-hari "
+            "sebelumnya tetap tersimpan."
+        )
+
+    context = _build_siswa_detail_context(period.student_id)
+    return hx_render(
+        "admin/siswa_detail.jinja",
+        push_url=url_for("admin.siswa_detail", id=period.student_id),
+        **context,
+        **notif,
     )
 
 

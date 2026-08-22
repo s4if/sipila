@@ -116,6 +116,32 @@ def create_app(test_config=None):
             db.session.commit()
             print(f"Admin user '{username}' deleted!")
 
+    @click.command("materialize-periods")
+    @click.option(
+        "--date",
+        "target_date",
+        default=None,
+        help="Target date in YYYY-MM-DD format (default: today).",
+    )
+    @with_appcontext
+    def materialize_periods(target_date):
+        """Create daily borrowing requests from active loan periods."""
+        from datetime import datetime
+
+        from .periods import materialize_periods as run
+
+        parsed = None
+        if target_date:
+            try:
+                parsed = datetime.strptime(target_date, "%Y-%m-%d").date()
+            except ValueError:
+                raise click.BadParameter(
+                    "Date must be in YYYY-MM-DD format"
+                )
+
+        created = run(parsed)
+        print(f"{created} borrowing request(s) created.")
+
     from . import admin, auth, siswa, supervisor
 
     app.register_blueprint(auth.bp)
@@ -125,6 +151,7 @@ def create_app(test_config=None):
     app.cli.add_command(add_admin_user)
     app.cli.add_command(delete_admin_user)
     app.cli.add_command(change_admin_user)
+    app.cli.add_command(materialize_periods)
 
     return app
 
