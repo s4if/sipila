@@ -7,6 +7,5 @@ if [ -z "$CONTAINER_ID" ]; then
 fi
 
 docker exec $CONTAINER_ID /bin/bash -c "
-  flask --app app db migrate
   flask --app app db upgrade
 "

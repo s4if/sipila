@@ -26,7 +26,7 @@ sipila/
 │       ├── siswa/              # Siswa portal (layout + pages)
 │       └── supervisor/         # Monitor page
 ├── tests/                      # pytest suite (conftest + 8 test files)
-├── migrations/                 # Alembic migrations (single initial revision)
+├── migrations/                 # Alembic migrations (tracked in git, initial revision)
 ├── docker/                     # Docker setup / post-update scripts
 ├── instance/                   # SQLite DB (gitignored)
 ├── appconfig.toml              # App-level config (app_name)
@@ -34,7 +34,7 @@ sipila/
 ├── Dockerfile                  # Production image (ENV TZ=Asia/Jakarta)
 ├── docker-compose.yml          # Compose stack (TZ=Asia/Jakarta, volume mounts instance/ + appconfig.toml)
 ├── DEPLOYMENT.md               # Deployment notes, WIB timezone strategy across the stack
-└── reset_migrations.sh         # Helper to reset Alembic migrations
+└── reset_dev_db.sh            # Reset DB development (hapus instance/, db upgrade, buat admin awal)
 ```
 
 ## Runtime Bootstrap (App Factory)

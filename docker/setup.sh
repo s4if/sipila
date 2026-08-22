@@ -7,8 +7,6 @@ if [ -z "$CONTAINER_ID" ]; then
 fi
 
 docker exec $CONTAINER_ID /bin/bash -c "
-  flask --app app db init
-  flask --app app db migrate
   flask --app app db upgrade
   flask --app app add-admin-user --username admin --password admin123 --role superadmin
 "

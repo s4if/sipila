@@ -6,7 +6,6 @@ services:
       - "5000:5000"
     volumes:
       - ./instance:/app/instance
-      - ./migrations:/app/migrations
       - ./appconfig.toml:/app/appconfig.toml:ro
     restart: unless-stopped
     environment:

@@ -1,5 +1,23 @@
 # Catatan Deployment
 
+## Migrasi Database
+
+Riwayat migrasi Alembic (`migrations/`) dilacak di git dan ikut ter-bake
+ke dalam image Docker (via `COPY . /app` di Dockerfile). Tidak ada bind
+mount `./migrations` — deploy migrasi baru selalu lewat rebuild image:
+
+```bash
+git pull
+docker compose up --build
+./docker/postupdate.sh <container_id>   # flask db upgrade di dalam container
+```
+
+Setup pertama kali pakai `./docker/setup.sh <container_id>` (migrasi +
+admin awal). Karena revisi migrasi hanya berlaku untuk satu riwayat,
+jangan pernah menghapus/membuat ulang `migrations/` di satu sisi saja
+(dev vs prod) — DB yang sudah di-upgrade dengan riwayat lama harus
+di-reset jika riwayatnya diganti total.
+
 ## Timezone: Asia/Jakarta (WIB) di seluruh stack
 
 Aplikasi menyimpan dan memproses waktu sebagai **datetime naive** yang nilainya selalu merupakan wall-clock WIB. Tidak ada konversi timezone di level aplikasi. Konsistensi dijamin dengan **mem-pin timezone proses ke `Asia/Jakarta`** di tiga lapis:

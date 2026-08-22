@@ -26,10 +26,6 @@ tests/
 .coverage
 coverage.xml
 
-# Ignore migration files (assuming you're using Alembic)
-alembic.ini
-migrations/
-
 # Ignore node_modules (if you're using JavaScript dependencies)
 node_modules/
 
