@@ -151,7 +151,10 @@ class LoanPeriod(db.Model):
     category = db.relationship("Category", backref="loan_periods")
     creator = db.relationship("Teacher", backref="loan_periods")
     requests = db.relationship(
-        "BorrowingRequest", backref="loan_period", lazy="dynamic"
+        "BorrowingRequest",
+        backref="loan_period",
+        lazy="dynamic",
+        passive_deletes=True,
     )
 
     def __repr__(self):
@@ -181,9 +184,14 @@ class BorrowingRequest(db.Model):
     category_id = db.Column(
         db.Integer, db.ForeignKey("categories.id"), nullable=False
     )
-    # Terisi jika row ini digenerate dari LoanPeriod (pinjaman periode)
+    # Terisi jika row ini digenerate dari LoanPeriod (izin panjang).
+    # Saat LoanPeriod dihapus, FK ini di-set NULL oleh DB (ON DELETE SET
+    # NULL, lihat pragma foreign_keys di app/db.py) — riwayat permintaan
+    # tetap tersimpan tanpa terkait izin lagi.
     loan_period_id = db.Column(
-        db.Integer, db.ForeignKey("loan_periods.id"), nullable=True
+        db.Integer,
+        db.ForeignKey("loan_periods.id", ondelete="SET NULL"),
+        nullable=True,
     )
     date = db.Column(db.Date, nullable=False)
     status = db.Column(db.String(16), nullable=False, default="pending")

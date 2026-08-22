@@ -1,8 +1,8 @@
 {% if not is_htmx %}
     {% extends "admin/layout.jinja" %}
-    {% block title %}Tambah Pinjaman Periode{% endblock %}
+    {% block title %}{{ 'Edit Izin Panjang' if period else 'Tambah Izin Panjang' }}{% endblock %}
 {% else %}
-    <title>Tambah Pinjaman Periode</title>
+    <title>{{ 'Edit Izin Panjang' if period else 'Tambah Izin Panjang' }}</title>
 {% endif %}
 
 {% from 'macros.jinja' import render_notif %}
@@ -11,7 +11,7 @@
 
 {{ render_notif(error, success, info) }}
 
-<h4 class="mb-3">Tambah Pinjaman Periode</h4>
+<h4 class="mb-3">{{ 'Edit Izin Panjang' if period else 'Tambah Izin Panjang' }}</h4>
 
 <div class="card mb-3">
     <div class="card-body py-2">
@@ -26,8 +26,8 @@
 <div class="row">
     <div class="col">
         <form method="POST"
-              action="{{ url_for('admin.pinjaman_periode_tambah', id=student.id) }}"
-              hx-post="{{ url_for('admin.pinjaman_periode_tambah', id=student.id) }}"
+              action="{{ url_for('admin.izin_panjang_edit', period_id=period.id) if period else url_for('admin.pinjaman_periode_tambah', id=student.id) }}"
+              hx-post="{{ url_for('admin.izin_panjang_edit', period_id=period.id) if period else url_for('admin.pinjaman_periode_tambah', id=student.id) }}"
               hx-target="#hx_content"
               hx-swap="innerHTML">
             {{ form.hidden_tag() }}
@@ -75,11 +75,11 @@
             </div>
             <div class="mb-3">
                 <button type="submit" class="btn btn-primary">
-                    <i class="bi bi-calendar-week"></i> Tambah Pinjaman Periode
+                    {{ 'Simpan Perubahan' if period else 'Tambah Izin Panjang' }}
                 </button>
                 <a class="btn btn-secondary ms-2"
-                   href="{{ url_for('admin.siswa_detail', id=student.id) }}"
-                   hx-get="{{ url_for('admin.siswa_detail', id=student.id) }}"
+                   href="{{ url_for('admin.izin_panjang') if period else url_for('admin.siswa_detail', id=student.id) }}"
+                   hx-get="{{ url_for('admin.izin_panjang') if period else url_for('admin.siswa_detail', id=student.id) }}"
                    hx-target="#hx_content"
                    hx-swap="innerHTML">Batal</a>
             </div>

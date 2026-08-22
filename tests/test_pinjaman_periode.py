@@ -503,6 +503,224 @@ def test_batalkan_twice_fails(
     assert "sudah tidak aktif" in html
 
 
+# ---- Route: halaman Izin Panjang (monitor LoanPeriod) ----
+
+
+def test_izin_panjang_page_renders(logged_in_client):
+    response = logged_in_client.get("/admin/izin-panjang")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Data Izin Panjang" in html
+    # Halaman monitor tidak punya tombol tambah
+    assert "Tambah Izin Panjang</a>" not in html
+    assert "Tambah Izin Panjang</button>" not in html
+
+
+def test_izin_panjang_data_shows_actions_for_superadmin(
+    logged_in_client, siswa_user, kategori_with_teacher, admin_user
+):
+    _make_period(siswa_user, kategori_with_teacher, admin_user)
+    response = logged_in_client.get("/admin/izin-panjang/data")
+    assert response.status_code == 200
+    rows = response.get_json()["data"]
+    assert len(rows) == 1
+    assert rows[0]["name"] == siswa_user.name
+    assert "edit_izin_panjang" in rows[0]["actions"]
+    assert "hapus_izin_panjang" in rows[0]["actions"]
+
+
+def test_izin_panjang_data_shows_actions_for_creator(
+    regular_admin_client, siswa_user, kategori_with_teacher, regular_admin
+):
+    _make_period(siswa_user, kategori_with_teacher, regular_admin)
+    response = regular_admin_client.get("/admin/izin-panjang/data")
+    rows = response.get_json()["data"]
+    assert "edit_izin_panjang" in rows[0]["actions"]
+    assert "hapus_izin_panjang" in rows[0]["actions"]
+
+
+def test_izin_panjang_data_actions_hidden_for_other_regular_admin(
+    regular_admin_client, siswa_user, kategori_with_teacher, admin_user
+):
+    # Periode dibuat superadmin; guru lain bukan pembuat → aksi "-"
+    _make_period(siswa_user, kategori_with_teacher, admin_user)
+    response = regular_admin_client.get("/admin/izin-panjang/data")
+    rows = response.get_json()["data"]
+    assert len(rows) == 1
+    assert rows[0]["actions"] == "-"
+
+
+def test_izin_panjang_edit_by_creator(
+    regular_admin_client, siswa_user, kategori_with_teacher, regular_admin
+):
+    from app.periods import materialize_periods
+
+    today = get_today()
+    period = _make_period(siswa_user, kategori_with_teacher, regular_admin)
+
+    response = regular_admin_client.get(
+        "/admin/izin-panjang/edit/{}".format(period.id)
+    )
+    assert response.status_code == 200
+    assert "Edit Izin Panjang" in response.get_data(as_text=True)
+
+    data = {
+        "category_id": kategori_with_teacher.id,
+        "start_date": today.isoformat(),
+        "end_date": (today + timedelta(days=5)).isoformat(),
+        "note": "Diperpanjang",
+    }
+    response = regular_admin_client.post(
+        "/admin/izin-panjang/edit/{}".format(period.id), data=data
+    )
+    assert response.status_code == 200
+    db.session.refresh(period)
+    assert period.end_date == today + timedelta(days=5)
+    assert period.note == "Diperpanjang"
+
+    # Rentang hasil edit mencakup hari ini → row hari ini dibuat
+    req = BorrowingRequest.query.filter_by(
+        student_id=siswa_user.id, date=today
+    ).one()
+    assert req.loan_period_id == period.id
+    assert materialize_periods(today) == 0  # idempotent
+
+
+def test_izin_panjang_edit_by_superadmin(
+    logged_in_client, siswa_user, kategori_with_teacher, regular_admin
+):
+    today = get_today()
+    period = _make_period(siswa_user, kategori_with_teacher, regular_admin)
+    data = {
+        "category_id": kategori_with_teacher.id,
+        "start_date": today.isoformat(),
+        "end_date": (today + timedelta(days=2)).isoformat(),
+        "note": "Diedit superadmin",
+    }
+    response = logged_in_client.post(
+        "/admin/izin-panjang/edit/{}".format(period.id), data=data
+    )
+    assert response.status_code == 200
+    db.session.refresh(period)
+    assert period.note == "Diedit superadmin"
+
+
+def test_izin_panjang_edit_rejected_for_other_regular_admin(
+    regular_admin_client, siswa_user, kategori_with_teacher, admin_user
+):
+    period = _make_period(siswa_user, kategori_with_teacher, admin_user)
+    response = regular_admin_client.get(
+        "/admin/izin-panjang/edit/{}".format(period.id)
+    )
+    html = response.get_data(as_text=True)
+    assert "tidak berwenang" in html
+
+
+def test_izin_panjang_edit_rejects_inverted_range(
+    logged_in_client, siswa_user, kategori_with_teacher, admin_user
+):
+    today = get_today()
+    period = _make_period(siswa_user, kategori_with_teacher, admin_user)
+    data = {
+        "category_id": kategori_with_teacher.id,
+        "start_date": (today + timedelta(days=5)).isoformat(),
+        "end_date": today.isoformat(),
+    }
+    response = logged_in_client.post(
+        "/admin/izin-panjang/edit/{}".format(period.id), data=data
+    )
+    html = response.get_data(as_text=True)
+    assert "Tanggal mulai tidak boleh lebih besar" in html
+    db.session.refresh(period)
+    assert period.start_date == today
+
+
+def test_izin_panjang_edit_rejects_overlap(
+    logged_in_client, siswa_user, kategori_with_teacher, admin_user
+):
+    today = get_today()
+    period = _make_period(
+        siswa_user,
+        kategori_with_teacher,
+        admin_user,
+        start=today,
+        end=today + timedelta(days=2),
+    )
+    _make_period(
+        siswa_user,
+        kategori_with_teacher,
+        admin_user,
+        start=today + timedelta(days=5),
+        end=today + timedelta(days=10),
+    )
+    data = {
+        "category_id": kategori_with_teacher.id,
+        "start_date": today.isoformat(),
+        "end_date": (today + timedelta(days=7)).isoformat(),
+    }
+    response = logged_in_client.post(
+        "/admin/izin-panjang/edit/{}".format(period.id), data=data
+    )
+    html = response.get_data(as_text=True)
+    assert "beririsan" in html
+    db.session.refresh(period)
+    assert period.end_date == today + timedelta(days=2)
+
+
+def test_izin_panjang_hapus_deletes_row_and_detaches_requests(
+    logged_in_client, siswa_user, kategori_with_teacher, admin_user
+):
+    from app.periods import materialize_periods
+
+    today = get_today()
+    period = _make_period(
+        siswa_user,
+        kategori_with_teacher,
+        admin_user,
+        start=today,
+        end=today + timedelta(days=2),
+    )
+    materialize_periods(today)
+    assert BorrowingRequest.query.filter_by(loan_period_id=period.id).count() == 1
+
+    response = logged_in_client.post(
+        "/admin/izin-panjang/hapus", data={"id": period.id}
+    )
+    assert response.status_code == 200
+    assert "berhasil dihapus" in response.get_data(as_text=True)
+
+    # Row izin benar-benar terhapus
+    assert LoanPeriod.query.count() == 0
+    # Riwayat permintaan tetap ada, loan_period_id di-null-kan
+    req = BorrowingRequest.query.filter_by(
+        student_id=siswa_user.id, date=today
+    ).one()
+    assert req.loan_period_id is None
+
+
+def test_izin_panjang_hapus_by_creator(
+    regular_admin_client, siswa_user, kategori_with_teacher, regular_admin
+):
+    period = _make_period(siswa_user, kategori_with_teacher, regular_admin)
+    response = regular_admin_client.post(
+        "/admin/izin-panjang/hapus", data={"id": period.id}
+    )
+    assert response.status_code == 200
+    assert LoanPeriod.query.count() == 0
+
+
+def test_izin_panjang_hapus_rejected_for_other_regular_admin(
+    regular_admin_client, siswa_user, kategori_with_teacher, admin_user
+):
+    period = _make_period(siswa_user, kategori_with_teacher, admin_user)
+    response = regular_admin_client.post(
+        "/admin/izin-panjang/hapus", data={"id": period.id}
+    )
+    html = response.get_data(as_text=True)
+    assert "tidak berwenang" in html
+    assert LoanPeriod.query.count() == 1
+
+
 # ---- Siswa: tidak bisa mengajukan manual di tanggal tercakup periode ----
 
 
