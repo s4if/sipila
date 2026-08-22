@@ -33,6 +33,11 @@
                hx-get="{{ url_for('admin.siswa') }}">
                 <i class="bi bi-people"></i><span>Siswa</span>
             </a>
+            <a class="app-nav-link" data-nav-key="izin-panjang"
+               href="{{ url_for('admin.izin_panjang') }}"
+               hx-get="{{ url_for('admin.izin_panjang') }}">
+                <i class="bi bi-calendar-range"></i><span>Izin Panjang</span>
+            </a>
             <a class="app-nav-link" data-nav-key="larangan"
                href="{{ url_for('admin.larangan') }}"
                hx-get="{{ url_for('admin.larangan') }}">

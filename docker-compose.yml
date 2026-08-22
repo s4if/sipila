@@ -1,4 +1,4 @@
-name: flask-hx-stack
+name: sipila
 services:
   app:
     build: .

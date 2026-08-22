@@ -48,6 +48,10 @@ uv run flask --app app add-admin-user
 uv run flask --app app change-admin-user
 uv run flask --app app delete-admin-user
 
+# Generate permintaan harian dari pinjaman periode (jalankan via cron, lihat DEPLOYMENT.md)
+uv run flask --app app materialize-periods
+uv run flask --app app materialize-periods --date 2026-08-22
+
 # Docker
 docker compose up --build
 ```

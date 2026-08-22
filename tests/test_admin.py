@@ -243,6 +243,107 @@ def test_guru_hapus_success(logged_in_client, app):
     assert response.status_code == 200
     assert b"berhasil dihapus" in response.data
 
+    # Soft delete: row tetap ada, ditandai terhapus, username ditandai
+    # supaya bisa dipakai guru baru.
+    with app.app_context():
+        deleted = db.session.get(Teacher, guru_id)
+        assert deleted is not None
+        assert deleted.is_deleted is True
+        assert deleted.username.startswith("hapus_guru#deleted#")
+
+
+def test_guru_hapus_with_history_preserves_rows(
+    logged_in_client, app, siswa_user
+):
+    # Dulu: hapus guru yang punya larangan memicu IntegrityError (500).
+    # Sekarang: soft delete, riwayat tetap utuh.
+    from datetime import date
+
+    from werkzeug.security import generate_password_hash
+
+    from app import db
+    from app.models import StudentBan, Teacher
+
+    with app.app_context():
+        guru = Teacher(
+            username="guru_sejarah",
+            password=generate_password_hash("pass"),
+        )
+        db.session.add(guru)
+        db.session.flush()
+        ban = StudentBan(
+            student_id=siswa_user.id,
+            creator_id=guru.id,
+            start_date=date.today(),
+            end_date=date.today(),
+            reason="riwayat",
+        )
+        db.session.add(ban)
+        db.session.commit()
+        guru_id, ban_id = guru.id, ban.id
+
+    response = logged_in_client.post("/admin/guru/hapus", data={"id": guru_id})
+    assert response.status_code == 200
+
+    with app.app_context():
+        assert db.session.get(StudentBan, ban_id) is not None
+        assert db.session.get(Teacher, guru_id).is_deleted is True
+
+
+def test_guru_data_excludes_deleted(logged_in_client, app, admin_user):
+    from app import db
+    from app.models import Teacher
+
+    with app.app_context():
+        db.session.add(Teacher(username="ghost", is_deleted=True))
+        db.session.commit()
+
+    response = logged_in_client.get("/admin/guru/data")
+    assert response.status_code == 200
+    usernames = [row["username"] for row in response.json["data"]]
+    assert "ghost" not in usernames
+    assert "admin" in usernames
+
+
+def test_guru_tambah_reuses_username_of_deleted_guru(logged_in_client, app):
+    # Username guru terhapus dikembalikan ke kolam nama yang bisa dipakai.
+    from werkzeug.security import generate_password_hash
+
+    from app import db
+    from app.models import Teacher
+
+    with app.app_context():
+        guru = Teacher(
+            username="diganti",
+            password=generate_password_hash("pass"),
+        )
+        db.session.add(guru)
+        db.session.commit()
+        guru_id = guru.id
+
+    response = logged_in_client.post("/admin/guru/hapus", data={"id": guru_id})
+    assert response.status_code == 200
+
+    response = logged_in_client.post(
+        "/admin/guru/tambah",
+        data={
+            "username": "diganti",
+            "name": "Pengganti",
+            "contact_person": "",
+            "password": "passbaru",
+        },
+    )
+    assert response.status_code == 200
+    assert b"berhasil ditambahkan" in response.data
+
+    with app.app_context():
+        assert (
+            Teacher.query.filter_by(
+                username="diganti", is_deleted=False
+            ).count()
+            == 1
+        )
+
 
 def test_guru_hapus_self_blocked(logged_in_client, admin_user):
     response = logged_in_client.post(
@@ -258,6 +359,201 @@ def test_guru_hapus_self_blocked(logged_in_client, admin_user):
 def test_guru_hapus_404(logged_in_client):
     response = logged_in_client.post("/admin/guru/hapus", data={"id": 9999})
     assert response.status_code == 404
+
+
+# ---- Guru Import tests ----
+
+
+def _build_guru_xlsx(rows=None):
+    from io import BytesIO
+
+    import openpyxl
+
+    if rows is None:
+        rows = []
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+
+    ws.cell(row=1, column=1, value="Username")
+    ws.cell(row=1, column=2, value="Nama")
+    ws.cell(row=1, column=3, value="Password")
+    ws.cell(row=1, column=4, value="Kontak")
+
+    for i, row_data in enumerate(rows):
+        r = 2 + i
+        for col_idx, val in enumerate(row_data, start=1):
+            ws.cell(row=r, column=col_idx, value=val)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def test_guru_template_download(logged_in_client):
+    response = logged_in_client.get("/admin/guru/template")
+    assert response.status_code == 200
+    assert response.content_type == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert b"PK" in response.data
+
+
+def test_guru_import_no_file(logged_in_client):
+    response = logged_in_client.post("/admin/guru/import")
+    assert response.status_code == 200
+    assert b"Tidak ada file" in response.data
+
+
+def test_guru_import_wrong_extension(logged_in_client):
+    from io import BytesIO
+
+    buf = BytesIO(b"not an xlsx")
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "data.csv")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"harus berformat" in response.data
+
+
+def test_guru_import_success(logged_in_client, app):
+    from app import db
+    from app.models import Teacher
+
+    buf = _build_guru_xlsx(
+        rows=[
+            ("budi", "Budi Santoso, S.Kom", "pass123", "081234567890"),
+            ("siti", "Siti Aminah", "", ""),
+        ]
+    )
+
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"2 guru ditambahkan" in response.data
+
+    with app.app_context():
+        assert Teacher.query.filter_by(username="budi").first() is not None
+        assert Teacher.query.filter_by(username="siti").first() is not None
+
+
+def test_guru_import_fail_fast_existing_username(logged_in_client, app):
+    from werkzeug.security import generate_password_hash
+
+    from app import db
+    from app.models import Teacher
+
+    with app.app_context():
+        existing = Teacher(
+            username="budi",
+            name="Budi Lama",
+            password=generate_password_hash("old"),
+        )
+        db.session.add(existing)
+        db.session.commit()
+
+        buf = _build_guru_xlsx(
+            rows=[
+                ("baru", "Guru Baru", "pass123", ""),
+                ("budi", "Budi Baru", "pass123", ""),
+            ]
+        )
+
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"Validasi gagal" in response.data
+    assert b"sudah digunakan" in response.data
+
+    # Fail fast: tidak ada guru baru yang diimport
+    with app.app_context():
+        assert Teacher.query.filter_by(username="baru").first() is None
+
+
+def test_guru_import_fail_fast_duplicate_in_file(logged_in_client, app):
+    from app.models import Teacher
+
+    buf = _build_guru_xlsx(
+        rows=[
+            ("budi", "Budi Satu", "pass123", ""),
+            ("budi", "Budi Dua", "pass123", ""),
+        ]
+    )
+
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"duplikat" in response.data
+
+    with app.app_context():
+        assert Teacher.query.filter_by(username="budi").count() == 0
+
+
+def test_guru_import_empty_file(logged_in_client):
+    buf = _build_guru_xlsx(rows=[])
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"Tidak ada data guru" in response.data
+
+
+def test_guru_import_strips_leading_apostrophe_in_kontak(logged_in_client, app):
+    from app.models import Teacher
+
+    # LibreOffice menyimpan awalan ' (penanda format teks) sebagai bagian
+    # dari nilai sel saat menyimpan ke xlsx
+    buf = _build_guru_xlsx(
+        rows=[("budi", "Budi Santoso", "pass123", "'081234567890")]
+    )
+
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"1 guru ditambahkan" in response.data
+
+    with app.app_context():
+        teacher = Teacher.query.filter_by(username="budi").first()
+        assert teacher is not None
+        assert teacher.contact_person == "081234567890"
+
+
+def test_guru_import_default_password_is_username(logged_in_client, app):
+    from werkzeug.security import check_password_hash
+
+    from app import db
+    from app.models import Teacher
+
+    buf = _build_guru_xlsx(rows=[("siti", "Siti Aminah", "", "")])
+
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+
+    with app.app_context():
+        teacher = Teacher.query.filter_by(username="siti").first()
+        assert teacher is not None
+        assert check_password_hash(teacher.password, "siti")
 
 
 # ---- Siswa Import tests ----

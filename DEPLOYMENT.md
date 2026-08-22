@@ -1,5 +1,23 @@
 # Catatan Deployment
 
+## Migrasi Database
+
+Riwayat migrasi Alembic (`migrations/`) dilacak di git dan ikut ter-bake
+ke dalam image Docker (via `COPY . /app` di Dockerfile). Tidak ada bind
+mount `./migrations` — deploy migrasi baru selalu lewat rebuild image:
+
+```bash
+git pull
+docker compose up --build
+./docker/postupdate.sh <container_id>   # flask db upgrade di dalam container
+```
+
+Setup pertama kali pakai `./docker/setup.sh <container_id>` (migrasi +
+admin awal). Karena revisi migrasi hanya berlaku untuk satu riwayat,
+jangan pernah menghapus/membuat ulang `migrations/` di satu sisi saja
+(dev vs prod) — DB yang sudah di-upgrade dengan riwayat lama harus
+di-reset jika riwayatnya diganti total.
+
 ## Timezone: Asia/Jakarta (WIB) di seluruh stack
 
 Aplikasi menyimpan dan memproses waktu sebagai **datetime naive** yang nilainya selalu merupakan wall-clock WIB. Tidak ada konversi timezone di level aplikasi. Konsistensi dijamin dengan **mem-pin timezone proses ke `Asia/Jakarta`** di tiga lapis:
@@ -37,3 +55,29 @@ Container harus berjalan dengan `TZ=Asia/Jakarta` (sudah diatur di `Dockerfile` 
 environment:
   TZ: Asia/Jakarta   # WAJIB, jangan dihapus
 ```
+
+## Cron: generate permintaan harian dari pinjaman periode
+
+Peminjaman jangka panjang (`LoanPeriod`) yang diberikan guru tidak langsung membuat
+row `BorrowingRequest`. Row harian dibuat **malas** oleh CLI command
+`materialize-periods` (idempotent — aman dijalankan berulang):
+
+```bash
+uv run flask --app app materialize-periods            # untuk hari ini
+uv run flask --app app materialize-periods --date 2026-08-22   # utk tanggal tertentu
+```
+
+Jalankan lewat cron sekali sehari (mis. 00:05 WIB). Contoh crontab di server
+production (di dalam container: `docker compose exec -T app ...`):
+
+```cron
+5 0 * * * cd /srv/sipila && docker compose exec -T app flask --app app materialize-periods
+```
+
+Catatan:
+- Hari ketika siswa sedang dalam masa larangan (`StudentBan`) otomatis dilewati.
+- Jika cron terlewat beberapa hari, jalankan manual dengan `--date` per tanggal
+  yang tertinggal (urutan bebas karena command ini idempotent).
+- Saat guru membuat periode yang sudah mencakup hari ini, row hari ini langsung
+  dibuat di request yang sama — jadi tidak ada celah jam antara pembuatan dan
+  jadwal cron berikutnya.

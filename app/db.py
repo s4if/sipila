@@ -12,6 +12,8 @@ migrate = Migrate()
 # yang sudah ada; journal_mode tersimpan di file DB, sisanya per-koneksi):
 # - journal_mode=WAL: pembaca tidak diblokir penulis, cocok untuk multi-worker.
 # - synchronous=FULL: fsync pada setiap commit — paling aman, sedikit lebih lambat.
+# - foreign_keys=ON: constraint FK di-enforce di level SQLite (off secara
+#   default), termasuk ON DELETE dari relasi model.
 # - busy_timeout: tunggu 10 detik saat DB terkunci alih-alih langsung error.
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
@@ -21,6 +23,7 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=FULL")
     cursor.execute("PRAGMA busy_timeout=10000")
+    cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
 

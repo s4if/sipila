@@ -19,10 +19,6 @@ logs/
 # Ignore database files (assuming you're using SQLite)
 app.db
 
-# Ignore migration files (assuming you're using Alembic)
-alembic.ini
-migrations/
-
 # Ignore test files
 tests/
 

@@ -9,6 +9,7 @@ from .forms import (
     GantiPasswordForm,
     GuruForm,
     KategoriForm,
+    PinjamanPeriodeForm,
     RombelForm,
     SiswaForm,
     StudentBanForm,
@@ -27,6 +28,7 @@ from .models import (
     Category,
     CategoryTeacher,
     ClassGroup,
+    LoanPeriod,
     Student,
     StudentBan,
     Teacher,
@@ -165,7 +167,9 @@ def rombel_tambah():
     form = RombelForm()
     form.homeroom_teacher_id.choices = [("", "Belum ditentukan")] + [
         (a.id, a.name or "[nama belum di set]")
-        for a in Teacher.query.order_by(Teacher.username).all()
+        for a in Teacher.query.filter_by(is_deleted=False)
+        .order_by(Teacher.username)
+        .all()
     ]
     if request.method == "GET":
         return hx_render("admin/rombel_form.jinja", class_group=None, form=form)
@@ -193,7 +197,9 @@ def rombel_edit(id):
     form = RombelForm(obj=class_group)
     form.homeroom_teacher_id.choices = [("", "Belum ditentukan")] + [
         (a.id, a.name or "[nama belum di set]")
-        for a in Teacher.query.order_by(Teacher.username).all()
+        for a in Teacher.query.filter_by(is_deleted=False)
+        .order_by(Teacher.username)
+        .all()
     ]
     if request.method == "GET":
         return hx_render(
@@ -933,6 +939,336 @@ def siswa_detail_export(id):
     )
 
 
+# ---- Pinjaman Periode (LoanPeriod, peminjaman multi-hari oleh guru) ----
+
+
+def _populate_period_category_choices(form, teacher, period=None):
+    # Superadmin boleh semua kategori; guru biasa hanya kategori yang diawasnya
+    # (kategori yang sudah dihapus tidak pernah ditawarkan)
+    if session.get("is_superadmin", False):
+        categories = (
+            Category.query.filter_by(is_deleted=False).order_by(Category.id).all()
+        )
+    else:
+        category_ids = _get_teacher_category_ids(teacher.id)
+        if category_ids:
+            categories = (
+                Category.query.filter(
+                    Category.id.in_(category_ids),
+                    Category.is_deleted.is_(False),
+                )
+                .order_by(Category.id)
+                .all()
+            )
+        else:
+            categories = []
+    form.category_id.choices = [("", "Pilih kategori")] + [
+        (c.id, c.name) for c in categories
+    ]
+    # Saat edit, pastikan kategori saat ini tetap bisa dipilih walau sang
+    # pembuat sudah tidak lagi mengawasi kategori tersebut — kecuali
+    # kategorinya sudah dihapus (soft delete).
+    if (
+        period is not None
+        and period.category is not None
+        and not period.category.is_deleted
+    ):
+        if period.category_id not in [c.id for c in categories]:
+            form.category_id.choices.append(
+                (period.category_id, period.category.name)
+            )
+
+
+def _can_manage_period(period):
+    # Hanya superadmin atau guru pembuat yang boleh edit/hapus
+    if session.get("is_superadmin", False):
+        return True
+    return (
+        period.creator is not None
+        and session.get("admin_name") == period.creator.username
+    )
+
+
+@bp.route("/siswa/<int:id>/pinjaman-periode/tambah", methods=["GET", "POST"])
+@admin_required
+def pinjaman_periode_tambah(id):
+    from .periods import materialize_periods
+
+    student = db.get_or_404(Student, id)
+    teacher = _get_current_teacher()
+    form = PinjamanPeriodeForm()
+    _populate_period_category_choices(form, teacher)
+
+    ctx = {"student": student, "form": form}
+    if request.method == "GET":
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx)
+
+    notif = {}
+    if not form.validate_on_submit():
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx)
+
+    today = get_today()
+    if form.start_date.data > form.end_date.data:
+        notif["error"] = (
+            "Tanggal mulai tidak boleh lebih besar dari tanggal selesai"
+        )
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx, **notif)
+
+    if form.start_date.data < today:
+        notif["error"] = "Tanggal mulai tidak boleh di masa lalu"
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx, **notif)
+
+    overlap = LoanPeriod.query.filter(
+        LoanPeriod.student_id == student.id,
+        LoanPeriod.is_active.is_(True),
+        LoanPeriod.start_date <= form.end_date.data,
+        LoanPeriod.end_date >= form.start_date.data,
+    ).first()
+    if overlap:
+        notif["error"] = (
+            "Siswa sudah memiliki izin panjang aktif yang beririsan "
+            "dengan rentang tanggal ini ({} s/d {})".format(
+                overlap.start_date.strftime("%d/%m/%Y"),
+                overlap.end_date.strftime("%d/%m/%Y"),
+            )
+        )
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx, **notif)
+
+    period = LoanPeriod(
+        student_id=student.id,
+        category_id=form.category_id.data,
+        start_date=form.start_date.data,
+        end_date=form.end_date.data,
+        note=sanitize(form.note.data) or None,
+        created_by=teacher.id,
+    )
+    db.session.add(period)
+    db.session.commit()
+
+    # Jika rentang sudah mencakup hari ini, buat row hari ini sekarang
+    # juga — cron hanya jalan sekali sehari sehingga bisa terlewat dari
+    # jam pembuatan sampai jadwal cron berikutnya.
+    if period.start_date <= today <= period.end_date:
+        materialize_periods(today)
+
+    notif["success"] = (
+        "Izin panjang berhasil ditambahkan. Permintaan harian akan "
+        "dibuat otomatis setiap hari oleh sistem."
+    )
+    context = _build_siswa_detail_context(student.id)
+    return hx_render(
+        "admin/siswa_detail.jinja",
+        push_url=url_for("admin.siswa_detail", id=student.id),
+        **context,
+        **notif,
+    )
+
+
+@bp.route("/pinjaman-periode/batalkan/<int:period_id>", methods=["POST"])
+@admin_required
+def pinjaman_periode_batalkan(period_id):
+    period = db.get_or_404(LoanPeriod, period_id)
+    notif = {}
+
+    # Hanya superadmin atau guru pembuat yang boleh membatalkan
+    if not _can_manage_period(period):
+        notif["error"] = "Anda tidak berwenang membatalkan pinjaman periode ini"
+    elif not period.is_active:
+        notif["error"] = "Pinjaman periode sudah tidak aktif"
+    else:
+        period.is_active = False
+        period.cancelled_at = get_now()
+        db.session.commit()
+        notif["success"] = (
+            "Pinjaman periode berhasil dibatalkan. Permintaan untuk hari "
+            "ini dan seterusnya tidak akan dibuat lagi; riwayat hari-hari "
+            "sebelumnya tetap tersimpan."
+        )
+
+    context = _build_siswa_detail_context(period.student_id)
+    return hx_render(
+        "admin/siswa_detail.jinja",
+        push_url=url_for("admin.siswa_detail", id=period.student_id),
+        **context,
+        **notif,
+    )
+
+
+# ---- Izin Panjang: halaman monitor semua LoanPeriod ----
+# Pemberian izin baru tetap dilakukan dari halaman detail siswa; halaman
+# ini hanya untuk memantau, mengedit, dan menghapus.
+
+
+@bp.route("/izin-panjang")
+@admin_required
+def izin_panjang():
+    return hx_render("admin/izin_panjang.jinja")
+
+
+@bp.route("/izin-panjang/data")
+@admin_required
+def izin_panjang_data():
+    from sqlalchemy.orm import joinedload
+
+    periods = (
+        LoanPeriod.query.options(
+            joinedload(LoanPeriod.student).joinedload(Student.class_group),
+            joinedload(LoanPeriod.category),
+            joinedload(LoanPeriod.creator),
+        )
+        .order_by(LoanPeriod.created_at.desc(), LoanPeriod.id.desc())
+        .all()
+    )
+
+    is_superadmin = session.get("is_superadmin", False)
+    username = session.get("admin_name")
+    data = []
+    for i, period in enumerate(periods, 1):
+        student = period.student
+        can_manage = is_superadmin or (
+            period.creator is not None and username == period.creator.username
+        )
+        if can_manage:
+            student_name = js_escape(sanitize(student.name)) if student else ""
+            start_str = js_escape(period.start_date.strftime("%d/%m/%Y"))
+            end_str = js_escape(period.end_date.strftime("%d/%m/%Y"))
+            actions = (
+                '<a class="btn btn-sm btn-warning" '
+                f'onclick="edit_izin_panjang({period.id})">'
+                '<i class="bi bi-pencil"></i> Edit</a>'
+                ' <button type="button" class="btn btn-sm btn-danger" '
+                f"onclick=\"hapus_izin_panjang({period.id}, "
+                f"'{student_name}', '{start_str}', '{end_str}')\">"
+                '<i class="bi bi-trash"></i> Hapus</button>'
+            )
+        else:
+            actions = "-"
+
+        if period.status_label == "active":
+            status = '<span class="badge bg-success">Berlangsung</span>'
+        elif period.status_label == "upcoming":
+            status = '<span class="badge bg-info">Mendatang</span>'
+        elif period.status_label == "concluded":
+            status = '<span class="badge bg-secondary">Selesai</span>'
+        else:
+            status = '<span class="badge bg-danger">Dibatalkan</span>'
+
+        data.append(
+            {
+                "no": i,
+                "name": student.name if student else "-",
+                "class_group": (
+                    student.class_group.display_name
+                    if student and student.class_group
+                    else "-"
+                ),
+                "start_date": period.start_date.strftime("%d/%m/%Y"),
+                "end_date": period.end_date.strftime("%d/%m/%Y"),
+                "category": period.category.name if period.category else "-",
+                "creator": (
+                    period.creator.name or period.creator.username
+                    if period.creator
+                    else "-"
+                ),
+                "status": status,
+                "actions": actions,
+            }
+        )
+    return jsonify(data=data)
+
+
+@bp.route("/izin-panjang/edit/<int:period_id>", methods=["GET", "POST"])
+@admin_required
+def izin_panjang_edit(period_id):
+    from .periods import materialize_periods
+
+    period = db.get_or_404(LoanPeriod, period_id)
+    teacher = _get_current_teacher()
+    notif = {}
+
+    if not _can_manage_period(period):
+        notif["error"] = "Anda tidak berwenang mengedit izin panjang ini"
+        return hx_render(
+            "admin/izin_panjang.jinja", push_url="admin.izin_panjang", **notif
+        )
+
+    form = PinjamanPeriodeForm(obj=period)
+    _populate_period_category_choices(form, teacher, period=period)
+    ctx = {"student": period.student, "period": period, "form": form}
+
+    if request.method == "GET":
+        form.category_id.data = period.category_id
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx)
+
+    if not form.validate_on_submit():
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx)
+
+    if form.start_date.data > form.end_date.data:
+        notif["error"] = (
+            "Tanggal mulai tidak boleh lebih besar dari tanggal selesai"
+        )
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx, **notif)
+
+    # Cek irisan hanya terhadap periode AKTIF lain — periode yang sudah
+    # dibatalkan tidak menghasilkan permintaan harian lagi.
+    overlap = LoanPeriod.query.filter(
+        LoanPeriod.student_id == period.student_id,
+        LoanPeriod.is_active.is_(True),
+        LoanPeriod.id != period.id,
+        LoanPeriod.start_date <= form.end_date.data,
+        LoanPeriod.end_date >= form.start_date.data,
+    ).first()
+    if overlap:
+        notif["error"] = (
+            "Siswa sudah memiliki izin panjang aktif lain yang beririsan "
+            "dengan rentang tanggal ini ({} s/d {})".format(
+                overlap.start_date.strftime("%d/%m/%Y"),
+                overlap.end_date.strftime("%d/%m/%Y"),
+            )
+        )
+        return hx_render("admin/pinjaman_periode_form.jinja", **ctx, **notif)
+
+    period.category_id = form.category_id.data
+    period.start_date = form.start_date.data
+    period.end_date = form.end_date.data
+    period.note = sanitize(form.note.data) or None
+    db.session.commit()
+
+    # Jika hasil edit kini mencakup hari ini, buat row hari ini juga
+    today = get_today()
+    if period.is_active and period.start_date <= today <= period.end_date:
+        materialize_periods(today)
+
+    notif["success"] = "Izin panjang berhasil diperbarui"
+    return hx_render(
+        "admin/izin_panjang.jinja", push_url="admin.izin_panjang", **notif
+    )
+
+
+@bp.route("/izin-panjang/hapus", methods=["POST"])
+@admin_required
+def izin_panjang_hapus():
+    period_id = request.form.get("id", type=int)
+    period = db.get_or_404(LoanPeriod, period_id)
+    notif = {}
+
+    if not _can_manage_period(period):
+        notif["error"] = "Anda tidak berwenang menghapus izin panjang ini"
+    else:
+        # Row dihapus; BorrowingRequest yang pernah dibuat tetap ada dengan
+        # loan_period_id = NULL (ON DELETE SET NULL di level database).
+        db.session.delete(period)
+        db.session.commit()
+        notif["success"] = (
+            "Izin panjang berhasil dihapus. Permintaan untuk hari ini dan "
+            "seterusnya tidak akan dibuat lagi; riwayat hari-hari "
+            "sebelumnya tetap tersimpan."
+        )
+    return hx_render(
+        "admin/izin_panjang.jinja", push_url="admin.izin_panjang", **notif
+    )
+
+
 # ---- Larangan (StudentBan) CRUD terpusat ----
 
 
@@ -1139,7 +1475,9 @@ def guru():
 @bp.route("/guru/data")
 @superadmin_required
 def guru_data():
-    admins = Teacher.query.order_by(Teacher.id).all()
+    admins = (
+        Teacher.query.filter_by(is_deleted=False).order_by(Teacher.id).all()
+    )
     data = []
     for i, a in enumerate(admins, 1):
         role = "Superadmin" if a.is_superadmin else "Admin"
@@ -1200,7 +1538,7 @@ def guru_tambah():
 @bp.route("/guru/edit/<int:id>", methods=["GET", "POST"])
 @superadmin_required
 def guru_edit(id):
-    admin = db.get_or_404(Teacher, id)
+    admin = Teacher.query.filter_by(id=id, is_deleted=False).first_or_404()
     form = GuruForm(obj=admin)
     if request.method == "GET":
         return hx_render("admin/guru_form.jinja", guru=admin, form=form)
@@ -1240,9 +1578,170 @@ def guru_hapus():
     if admin.username == session["admin_name"]:
         notif["error"] = "Tidak dapat menghapus akun yang sedang digunakan"
     else:
-        db.session.delete(admin)
+        # Soft delete: username ditandai supaya bisa dipakai guru baru,
+        # riwayat (review, larangan, pinjaman periode) tetap tersimpan
+        # dan menunjuk id guru yang sama.
+        admin.is_deleted = True
+        admin.username = "{}#deleted#{}".format(admin.username, admin.id)
         db.session.commit()
         notif["success"] = "Guru berhasil dihapus"
+    return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+
+@bp.route("/guru/template")
+@superadmin_required
+def guru_template():
+    from io import BytesIO
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Import Guru"
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(fill_type="solid", fgColor="4472C4")
+
+    headers = ["Username", "Nama", "Password", "Kontak"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+
+    ws.column_dimensions["A"].width = 20
+    ws.column_dimensions["B"].width = 30
+    ws.column_dimensions["C"].width = 20
+    ws.column_dimensions["D"].width = 20
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    from flask import send_file
+
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name="template_import_guru.xlsx",
+    )
+
+
+@bp.route("/guru/import", methods=["POST"])
+@superadmin_required
+def guru_import():
+    import openpyxl
+
+    notif = {}
+
+    if "file" not in request.files:
+        notif["error"] = "Tidak ada file yang diunggah"
+        return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    file = request.files["file"]
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        notif["error"] = "File harus berformat .xlsx"
+        return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    try:
+        wb = openpyxl.load_workbook(file)
+    except Exception:
+        notif["error"] = "File tidak dapat dibaca. Pastikan file xlsx valid."
+        return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    ws = wb.active
+
+    # Validasi header
+    headers = ["Username", "Nama", "Password", "Kontak"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell_val = str(ws.cell(row=1, column=col_idx).value or "").strip()
+        if cell_val != header:
+            notif["error"] = (
+                "Header kolom {} tidak valid: '{}' (seharusnya '{}')".format(
+                    col_idx, cell_val, header
+                )
+            )
+            return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    # Baca baris data mulai baris 2, berhenti saat username kosong
+    rows = []
+    validation_errors = []
+    seen_usernames = set()
+    r = 2
+    while True:
+        username = ws.cell(row=r, column=1).value
+        if username is None or not str(username).strip():
+            break
+        username = str(username).strip()
+        nama = ws.cell(row=r, column=2).value
+        nama = str(nama).strip() if nama is not None else ""
+        password = ws.cell(row=r, column=3).value
+        password = str(password).strip() if password is not None else ""
+        kontak = ws.cell(row=r, column=4).value
+        kontak = str(kontak).strip() if kontak is not None else ""
+        # Awalan ' dipakai di Excel/LibreOffice agar nomor HP (awalan 0)
+        # tersimpan sebagai teks; LibreOffice menyimpan ' sebagai bagian
+        # dari nilai sel, jadi buang sebelum disimpan ke database
+        kontak = kontak.lstrip("'").strip()
+
+        if not nama:
+            validation_errors.append("Baris {}: Nama wajib diisi".format(r))
+        if username in seen_usernames:
+            validation_errors.append(
+                "Baris {}: Username '{}' duplikat dalam file".format(r, username)
+            )
+        seen_usernames.add(username)
+        rows.append(
+            {
+                "row_num": r,
+                "username": username,
+                "nama": nama,
+                "password": password or username,
+                "kontak": kontak,
+            }
+        )
+        r += 1
+
+    if not rows:
+        notif["error"] = "Tidak ada data guru untuk diimport"
+        return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    # Fail fast: username sudah ada di database langsung gagal, tidak ada
+    # baris yang diimport sama sekali
+    existing_usernames = {
+        t.username for t in Teacher.query.filter(
+            Teacher.username.in_([row["username"] for row in rows])
+        ).all()
+    }
+    for row in rows:
+        if row["username"] in existing_usernames:
+            validation_errors.append(
+                "Baris {}: Username '{}' sudah digunakan".format(
+                    row["row_num"], row["username"]
+                )
+            )
+
+    if validation_errors:
+        notif["error"] = Markup(
+            "Validasi gagal:<br>- "
+            + "<br>- ".join(str(escape(e)) for e in validation_errors)
+        )
+        return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    for row_data in rows:
+        teacher = Teacher(
+            username=sanitize(row_data["username"]),
+            name=sanitize(row_data["nama"]),
+            contact_person=sanitize(row_data["kontak"]) or None,
+            password=generate_password_hash(
+                row_data["password"], method="pbkdf2:sha256", salt_length=16
+            ),
+        )
+        db.session.add(teacher)
+
+    db.session.commit()
+    notif["success"] = "Import selesai: {} guru ditambahkan".format(len(rows))
     return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
 
 
@@ -1252,7 +1751,9 @@ def guru_hapus():
 def _populate_kategori_teacher_choices(form):
     form.teachers.choices = [
         (t.id, t.name or t.username)
-        for t in Teacher.query.order_by(Teacher.username).all()
+        for t in Teacher.query.filter_by(is_deleted=False)
+        .order_by(Teacher.username)
+        .all()
     ]
 
 
@@ -1269,6 +1770,7 @@ def kategori_data():
 
     categories = (
         Category.query.options(joinedload(Category.teacher_links))
+        .filter_by(is_deleted=False)
         .order_by(Category.id)
         .all()
     )
@@ -1341,7 +1843,9 @@ def kategori_tambah():
 @bp.route("/kategori/edit/<int:id>", methods=["GET", "POST"])
 @superadmin_required
 def kategori_edit(id):
-    category = db.get_or_404(Category, id)
+    category = Category.query.filter_by(
+        id=id, is_deleted=False
+    ).first_or_404()
     form = KategoriForm(obj=category)
     _populate_kategori_teacher_choices(form)
     if request.method == "GET":
@@ -1382,7 +1886,26 @@ def kategori_edit(id):
 def kategori_hapus():
     id = request.form.get("id", type=int)
     category = db.get_or_404(Category, id)
-    db.session.delete(category)
+    # Soft delete: name diganti "[deleted]" (diakhiri id bila nama itu
+    # sudah dipakai kategori terhapus lain), link guru pengawas dibersihkan,
+    # dan LoanPeriod aktif dinonaktifkan supaya cron berhenti
+    # memmaterialisasi request untuk kategori yang sudah tidak ada.
+    # Riwayat permintaan lama tetap merujuk row ini.
+    category.is_deleted = True
+    new_name = "[deleted]"
+    if (
+        Category.query.filter(
+            Category.name == new_name, Category.id != id
+        ).first()
+        is not None
+    ):
+        new_name = "[deleted] {}".format(id)
+    category.name = new_name
+    CategoryTeacher.query.filter_by(category_id=id).delete()
+    LoanPeriod.query.filter_by(category_id=id, is_active=True).update(
+        {LoanPeriod.is_active: False, LoanPeriod.cancelled_at: get_now()},
+        synchronize_session=False,
+    )
     db.session.commit()
     notif = {"success": "Kategori berhasil dihapus"}
     return hx_render("admin/kategori.jinja", push_url="admin.kategori", **notif)

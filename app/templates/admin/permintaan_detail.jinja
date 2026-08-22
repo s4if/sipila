@@ -48,6 +48,12 @@
                         <th class="ps-0">Kategori</th>
                         <td>{{ req.category.name if req.category else '-' }}</td>
                     </tr>
+                    {% if req.loan_period %}
+                    <tr>
+                        <th class="ps-0">Pinjaman Periode</th>
+                        <td>Bagian dari pinjaman periode {{ req.loan_period.start_date.strftime('%d/%m/%Y') }} s/d {{ req.loan_period.end_date.strftime('%d/%m/%Y') }}</td>
+                    </tr>
+                    {% endif %}
                     <tr>
                         <th class="ps-0">Waktu Pengajuan</th>
                         <td>{{ req.created_at.strftime('%d/%m/%Y %H:%M') if req.created_at else '-' }}</td>

@@ -78,7 +78,9 @@ def login_admin():
 
         from .models import Teacher
 
-        a = Teacher.query.filter_by(username=request.form["username"]).first()
+        a = Teacher.query.filter_by(
+            username=request.form["username"], is_deleted=False
+        ).first()
         if a and check_password_hash(a.password, request.form["password"]):
             session.pop("captcha_answer", None)
             session["logged_in"] = True

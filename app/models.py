@@ -8,6 +8,9 @@ class Teacher(db.Model):
     username = db.Column(db.String(64), index=True, unique=True)
     password = db.Column(db.String(128))
     is_superadmin = db.Column(db.Boolean, nullable=False, default=False)
+    # Soft delete: guru terhapus tetap tersimpan (riwayat review/larangan
+    # tetap merujuk id-nya) tapi tidak bisa login dan tidak muncul di UI.
+    is_deleted = db.Column(db.Boolean, nullable=False, default=False)
     name = db.Column(db.String(128))
     contact_person = db.Column(db.String(20))
 
@@ -21,7 +24,9 @@ class ClassGroup(db.Model):
     name = db.Column(db.String(16), nullable=False)
     grade_level = db.Column(db.String(8), nullable=False)
     major = db.Column(db.String(64))
-    homeroom_teacher_id = db.Column(db.Integer, db.ForeignKey("teachers.id"))
+    homeroom_teacher_id = db.Column(
+        db.Integer, db.ForeignKey("teachers.id")
+    )
 
     homeroom_teacher = db.relationship("Teacher", backref="class_groups")
     students = db.relationship("Student", backref="class_group", lazy="select")
@@ -48,7 +53,9 @@ class Student(db.Model):
     student_id = db.Column(db.String(32), index=True, unique=True)
     name = db.Column(db.String(128))
     password = db.Column(db.String(128))
-    class_group_id = db.Column(db.Integer, db.ForeignKey("class_groups.id"))
+    class_group_id = db.Column(
+        db.Integer, db.ForeignKey("class_groups.id"), index=True
+    )
     is_deleted = db.Column(db.Boolean, nullable=False, default=False)
     admin_note = db.Column(db.String(256))
 
@@ -60,6 +67,9 @@ class Category(db.Model):
     __tablename__ = "categories"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False, unique=True)
+    # Soft delete: saat dihapus, name diganti "[deleted]" dan link guru
+    # pengawas dibersihkan; riwayat permintaan tetap merujuk row ini.
+    is_deleted = db.Column(db.Boolean, nullable=False, default=False)
 
     teacher_links = db.relationship(
         "CategoryTeacher",
@@ -80,7 +90,7 @@ class CategoryTeacher(db.Model):
         db.Integer, db.ForeignKey("categories.id"), nullable=False
     )
     teacher_id = db.Column(
-        db.Integer, db.ForeignKey("teachers.id"), nullable=False
+        db.Integer, db.ForeignKey("teachers.id"), nullable=False, index=True
     )
 
     def __repr__(self):
@@ -94,7 +104,10 @@ class StudentBan(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(
-        db.Integer, db.ForeignKey("students.id"), nullable=False
+        db.Integer,
+        db.ForeignKey("students.id"),
+        nullable=False,
+        index=True,
     )
     creator_id = db.Column(
         db.Integer, db.ForeignKey("teachers.id"), nullable=False
@@ -123,6 +136,63 @@ class StudentBan(db.Model):
         return self.end_date < get_today()
 
 
+class LoanPeriod(db.Model):
+    # Pinjaman jangka panjang yang diberikan guru. Row BorrowingRequest
+    # harian di-generate malas (lazy) dari sini, satu per satu saat
+    # tanggalnya tiba (lihat app/periods.py).
+    __tablename__ = "loan_periods"
+    id = db.Column(db.Integer, primary_key=True)
+    student_id = db.Column(
+        db.Integer,
+        db.ForeignKey("students.id"),
+        nullable=False,
+        index=True,
+    )
+    category_id = db.Column(
+        db.Integer,
+        db.ForeignKey("categories.id"),
+        nullable=False,
+        index=True,
+    )
+    start_date = db.Column(db.Date, nullable=False)
+    end_date = db.Column(db.Date, nullable=False)
+    note = db.Column(db.String(256), nullable=True)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+    created_by = db.Column(
+        db.Integer, db.ForeignKey("teachers.id"), nullable=False
+    )
+    created_at = db.Column(
+        db.DateTime, nullable=False, default=get_now
+    )
+    cancelled_at = db.Column(db.DateTime, nullable=True)
+
+    student = db.relationship("Student", backref="loan_periods")
+    category = db.relationship("Category", backref="loan_periods")
+    creator = db.relationship("Teacher", backref="loan_periods")
+    requests = db.relationship(
+        "BorrowingRequest",
+        backref="loan_period",
+        lazy="dynamic",
+        passive_deletes=True,
+    )
+
+    def __repr__(self):
+        return "<LoanPeriod student={} {} s/d {} active={}>".format(
+            self.student_id, self.start_date, self.end_date, self.is_active
+        )
+
+    @property
+    def status_label(self):
+        # Dipakai template untuk badge: active/upcoming/concluded/cancelled
+        if not self.is_active:
+            return "cancelled"
+        if self.end_date < get_today():
+            return "concluded"
+        if self.start_date > get_today():
+            return "upcoming"
+        return "active"
+
+
 class BorrowingRequest(db.Model):
     __tablename__ = "borrowing_requests"
     __table_args__ = (db.UniqueConstraint("student_id", "date"),)
@@ -133,8 +203,19 @@ class BorrowingRequest(db.Model):
     category_id = db.Column(
         db.Integer, db.ForeignKey("categories.id"), nullable=False
     )
-    date = db.Column(db.Date, nullable=False)
-    status = db.Column(db.String(16), nullable=False, default="pending")
+    # Terisi jika row ini digenerate dari LoanPeriod (izin panjang).
+    # Saat LoanPeriod dihapus, FK ini di-set NULL oleh DB (ON DELETE SET
+    # NULL, lihat pragma foreign_keys di app/db.py) — riwayat permintaan
+    # tetap tersimpan tanpa terkait izin lagi.
+    loan_period_id = db.Column(
+        db.Integer,
+        db.ForeignKey("loan_periods.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    date = db.Column(db.Date, nullable=False, index=True)
+    status = db.Column(
+        db.String(16), nullable=False, default="pending", index=True
+    )
     reviewed_by = db.Column(
         db.Integer, db.ForeignKey("teachers.id"), nullable=True
     )

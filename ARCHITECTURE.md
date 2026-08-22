@@ -12,6 +12,7 @@ sipila/
 │   ├── db.py                   # SQLAlchemy + Migrate init + PRAGMA SQLite (WAL) listener
 │   ├── models.py               # All SQLAlchemy models
 │   ├── helper.py               # Role decorators, hx_render, sanitize/js_escape, get_today/get_now, htmx init
+│   ├── periods.py              # LoanPeriod lazy materialization (materialize_periods, get_active_period_for)
 │   ├── forms.py                # WTForms form classes
 │   ├── auth.py                 # Auth blueprint (admin login, siswa login, logout)
 │   ├── admin.py                # Admin blueprint (dashboard, CRUD guru/rombel/siswa/kategori/larangan/permintaan)
@@ -25,7 +26,7 @@ sipila/
 │       ├── siswa/              # Siswa portal (layout + pages)
 │       └── supervisor/         # Monitor page
 ├── tests/                      # pytest suite (conftest + 8 test files)
-├── migrations/                 # Alembic migrations (single initial revision)
+├── migrations/                 # Alembic migrations (tracked in git, initial revision)
 ├── docker/                     # Docker setup / post-update scripts
 ├── instance/                   # SQLite DB (gitignored)
 ├── appconfig.toml              # App-level config (app_name)
@@ -33,7 +34,7 @@ sipila/
 ├── Dockerfile                  # Production image (ENV TZ=Asia/Jakarta)
 ├── docker-compose.yml          # Compose stack (TZ=Asia/Jakarta, volume mounts instance/ + appconfig.toml)
 ├── DEPLOYMENT.md               # Deployment notes, WIB timezone strategy across the stack
-└── reset_migrations.sh         # Helper to reset Alembic migrations
+└── reset_dev_db.sh            # Reset DB development (hapus instance/, db upgrade, buat admin awal)
 ```
 
 ## Runtime Bootstrap (App Factory)
@@ -50,7 +51,7 @@ sipila/
 - WAL is persistent in the DB header; backups must include `app.db-wal`/`app.db-shm` or use `sqlite3 app.db ".backup '..."` (SQLite-aware copy).
 - In-memory test DBs are unaffected: Flask-SQLAlchemy forces `StaticPool` for `:memory:`.
 - Root `/` redirects to `auth.login_admin`.
-- CLI commands (`add-admin-user`, `change-admin-user`, `delete-admin-user`): each takes `--username/--password/--role` (admin|superadmin); passwords hashed with pbkdf2:sha256, `salt_length=16`.
+- CLI commands (`add-admin-user`, `change-admin-user`, `delete-admin-user`, `materialize-periods`): the admin commands take `--username/--password/--role` (admin|superadmin); passwords hashed with pbkdf2:sha256, `salt_length=16`. `materialize-periods [--date YYYY-MM-DD]` generates daily `BorrowingRequest` rows from active `LoanPeriod`s (lazy materialization; run daily via cron — see DEPLOYMENT.md).
 
 ## Blueprints
 
@@ -69,15 +70,16 @@ All models live in `app/models.py` (Flask-SQLAlchemy). `__tablename__` is explic
 
 | Model | Table | Notes |
 |---|---|---|
-| `Teacher` | `teachers` | Admin/guru account: `username` (unique), `password` (hash), `is_superadmin`, `name`, `contact_person` |
+| `Teacher` | `teachers` | Admin/guru account: `username` (unique), `password` (hash), `is_superadmin`, `name`, `contact_person`, `is_deleted` (soft delete; username diganti `<username>#deleted#<id>` saat dihapus supaya bisa dipakai ulang) |
 | `ClassGroup` | `class_groups` | `name`, `grade_level`, `major`, `homeroom_teacher_id`; `display_name` & `active_student_count` properties |
 | `Student` | `students` | NIS (`student_id`, unique), `name`, `password`, `class_group_id`, `is_deleted` (soft delete), `admin_note` |
-| `Category` | `categories` | Laptop category: `name` (unique); `teacher_links` cascade delete-orphan |
+| `Category` | `categories` | Laptop category: `name` (unique), `is_deleted` (soft delete; saat dihapus `name` diganti `"[deleted]"` + suffix id bila bentrok, link `CategoryTeacher` dibersihkan, dan `LoanPeriod` aktifnya dinonaktifkan); `teacher_links` cascade delete-orphan |
 | `CategoryTeacher` | `category_teachers` | M2M join Category↔Teacher (supervising teachers), `UniqueConstraint(category_id, teacher_id)` |
 | `StudentBan` | `student_bans` | Larangan: `student_id`, `creator_id`, `start_date`, `end_date`, `reason`, `created_at`; `is_active`/`is_concluded` properties |
-| `BorrowingRequest` | `borrowing_requests` | `status` pending/accepted/rejected; review fields (`reviewed_by/at`, `teacher_note`); confirmation fields (`confirmation` used/not_used, `confirmed_by/at`); `UniqueConstraint(student_id, date)` |
+| `LoanPeriod` | `loan_periods` | Pinjaman multi-hari yang diberikan guru (bukan diajukan siswa): `student_id`, `category_id`, `start_date`/`end_date`, `note`, `is_active`, `created_by`, `created_at`, `cancelled_at`; `status_label` property (active/upcoming/concluded/cancelled). Row `BorrowingRequest` harian di-generate malas via `app/periods.py` |
+| `BorrowingRequest` | `borrowing_requests` | `status` pending/accepted/rejected; review fields (`reviewed_by/at`, `teacher_note`); confirmation fields (`confirmation` used/not_used, `confirmed_by/at`); `loan_period_id` (terisi jika row digenerate dari `LoanPeriod`); `UniqueConstraint(student_id, date)` |
 
-Conventions: foreign keys use `tablename.id`; relationships via `backref` or explicit `relationship()`; timestamp defaults are Python-side (`default=get_now`), never DB `now()`/triggers — keeps all times WIB wall-clock.
+Conventions: foreign keys use `tablename.id`; relationships via `backref` or explicit `relationship()`; timestamp defaults are Python-side (`default=get_now`), never DB `now()`/triggers — keeps all times WIB wall-clock. Soft delete (`is_deleted`) dipakai untuk siswa, guru, dan kategori supaya riwayat tetap utuh; semua query yang menampilkan pilihan/daftar memfilter `is_deleted=False`, termasuk login (guru & siswa).
 
 ## Auth, Roles & Security
 
@@ -96,8 +98,9 @@ Conventions: foreign keys use `tablename.id`; relationships via `backref` or exp
   - **List**: `GET /admin/<entity>` — page shell; `GET /admin/<entity>/data` returns JSON for DataTables
   - **Add**: `GET/POST /admin/<entity>/tambah` — GET shows form, POST creates, redirects to list
   - **Edit**: `GET/POST /admin/<entity>/edit/<id>` — GET shows pre-filled form, POST updates
-  - **Delete**: `POST /admin/<entity>/hapus` — soft delete for siswa (`is_deleted=True`), hard delete otherwise
+  - **Delete**: `POST /admin/<entity>/hapus` — soft delete for siswa (`is_deleted=True`), guru (`is_deleted=True`, username ditandai), dan kategori (`is_deleted=True`, name → `"[deleted]"`, link guru dibersihkan); hard delete for rombel (diblokir jika masih ada siswa aktif) dan larangan
 - JSON endpoints (always `{"data": [...]}` for DataTables): `/rombel/data`, `/siswa/data`, `/siswa/<id>/data`, `/larangan/data`, `/guru/data`, `/kategori/data`, `/permintaan/data`, `/siswa/permintaan/data`, `/supervisor/monitor/data`.
+- Pinjaman periode (peminjaman multi-hari, hanya oleh guru): `GET/POST /admin/siswa/<id>/pinjaman-periode/tambah` (form; superadmin memilih semua kategori, guru biasa hanya kategori yang diawasnya; validasi rentang, anti-overlap, start >= hari ini; jika rentang mencakup hari ini row hari ini langsung dimaterialisasi) dan `POST /admin/pinjaman-periode/batalkan/<id>` (hanya superadmin/pembuat). Tombolnya ada di halaman detail siswa. Siswa tidak bisa mengajukan manual pada tanggal yang tercakup periode aktif.
 - All page responses rendered via `hx_render()` (helper.py): injects standard context (`username`, `is_superadmin`, `student_name`, `is_htmx`) and, when `push_url=` is given, sets the `HX-Push-Url` header (accepts an endpoint name like `"siswa.beranda"` or a path).
 - Notifications passed as `notif` dict with keys `error`, `success`, `info`, rendered via `render_notif` macro.
 - Permintaan review is category-scoped: `_teacher_can_review(teacher_id, category_id)` restricts review to teachers linked to the request's category via `CategoryTeacher`; pending requests past their date are treated as `expired` (`_is_kadaluarsa`).

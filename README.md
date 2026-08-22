@@ -64,8 +64,14 @@ uv run flask --app app db migrate -m "deskripsi perubahan"
 uv run flask --app app db upgrade
 ```
 
-> Catatan: ada `reset_migrations.sh` yang menghapus seluruh riwayat
-> migrasi dan membuat ulang dari awal — **hanya untuk development**.
+Riwayat migrasi (`migrations/`) dilacak di git — commit hasil `db migrate`
+agar migrasi baru ikut ter-deploy lewat image Docker (lihat
+[DEPLOYMENT.md](./DEPLOYMENT.md)).
+
+> Catatan: `reset_dev_db.sh` menghapus database development
+> (`instance/`), menjalankan migrasi, dan membuat admin awal dari awal —
+> **hanya untuk development** (nama skrip warisan, fungsinya kini reset
+> DB, bukan reset riwayat migrasi).
 
 ## Testing
 
@@ -88,6 +94,8 @@ docker compose up --build
 
 - Port: `5000`.
 - Volume: `./instance` (database) dan `./appconfig.toml` (read-only).
+- Migrasi (`migrations/`) ikut di dalam image (`COPY` di Dockerfile) —
+  tanpa bind mount; deploy migrasi baru selalu lewat rebuild image.
 - Pastikan `SECRET_KEY` dan `TZ=Asia/Jakarta` diatur — lihat
   [docker-compose.yml](./docker-compose.yml).
 

@@ -164,14 +164,5 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# temporary disable migrations track
-!migrations/
-migrations/
-!instance/
-instance/*
-!test/instance/
-test/instance/*
-
 # Ignore Docker Installation
-docker/migrations/
 docker/instance/
