@@ -1389,6 +1389,163 @@ def guru_hapus():
     return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
 
 
+@bp.route("/guru/template")
+@superadmin_required
+def guru_template():
+    from io import BytesIO
+
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Import Guru"
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(fill_type="solid", fgColor="4472C4")
+
+    headers = ["Username", "Nama", "Password", "Kontak"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+
+    ws.column_dimensions["A"].width = 20
+    ws.column_dimensions["B"].width = 30
+    ws.column_dimensions["C"].width = 20
+    ws.column_dimensions["D"].width = 20
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    from flask import send_file
+
+    return send_file(
+        buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name="template_import_guru.xlsx",
+    )
+
+
+@bp.route("/guru/import", methods=["POST"])
+@superadmin_required
+def guru_import():
+    import openpyxl
+
+    notif = {}
+
+    if "file" not in request.files:
+        notif["error"] = "Tidak ada file yang diunggah"
+        return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    file = request.files["file"]
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        notif["error"] = "File harus berformat .xlsx"
+        return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    try:
+        wb = openpyxl.load_workbook(file)
+    except Exception:
+        notif["error"] = "File tidak dapat dibaca. Pastikan file xlsx valid."
+        return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    ws = wb.active
+
+    # Validasi header
+    headers = ["Username", "Nama", "Password", "Kontak"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell_val = str(ws.cell(row=1, column=col_idx).value or "").strip()
+        if cell_val != header:
+            notif["error"] = (
+                "Header kolom {} tidak valid: '{}' (seharusnya '{}')".format(
+                    col_idx, cell_val, header
+                )
+            )
+            return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    # Baca baris data mulai baris 2, berhenti saat username kosong
+    rows = []
+    validation_errors = []
+    seen_usernames = set()
+    r = 2
+    while True:
+        username = ws.cell(row=r, column=1).value
+        if username is None or not str(username).strip():
+            break
+        username = str(username).strip()
+        nama = ws.cell(row=r, column=2).value
+        nama = str(nama).strip() if nama is not None else ""
+        password = ws.cell(row=r, column=3).value
+        password = str(password).strip() if password is not None else ""
+        kontak = ws.cell(row=r, column=4).value
+        kontak = str(kontak).strip() if kontak is not None else ""
+        # Awalan ' dipakai di Excel/LibreOffice agar nomor HP (awalan 0)
+        # tersimpan sebagai teks; LibreOffice menyimpan ' sebagai bagian
+        # dari nilai sel, jadi buang sebelum disimpan ke database
+        kontak = kontak.lstrip("'").strip()
+
+        if not nama:
+            validation_errors.append("Baris {}: Nama wajib diisi".format(r))
+        if username in seen_usernames:
+            validation_errors.append(
+                "Baris {}: Username '{}' duplikat dalam file".format(r, username)
+            )
+        seen_usernames.add(username)
+        rows.append(
+            {
+                "row_num": r,
+                "username": username,
+                "nama": nama,
+                "password": password or username,
+                "kontak": kontak,
+            }
+        )
+        r += 1
+
+    if not rows:
+        notif["error"] = "Tidak ada data guru untuk diimport"
+        return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    # Fail fast: username sudah ada di database langsung gagal, tidak ada
+    # baris yang diimport sama sekali
+    existing_usernames = {
+        t.username for t in Teacher.query.filter(
+            Teacher.username.in_([row["username"] for row in rows])
+        ).all()
+    }
+    for row in rows:
+        if row["username"] in existing_usernames:
+            validation_errors.append(
+                "Baris {}: Username '{}' sudah digunakan".format(
+                    row["row_num"], row["username"]
+                )
+            )
+
+    if validation_errors:
+        notif["error"] = Markup(
+            "Validasi gagal:<br>- "
+            + "<br>- ".join(str(escape(e)) for e in validation_errors)
+        )
+        return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+    for row_data in rows:
+        teacher = Teacher(
+            username=sanitize(row_data["username"]),
+            name=sanitize(row_data["nama"]),
+            contact_person=sanitize(row_data["kontak"]) or None,
+            password=generate_password_hash(
+                row_data["password"], method="pbkdf2:sha256", salt_length=16
+            ),
+        )
+        db.session.add(teacher)
+
+    db.session.commit()
+    notif["success"] = "Import selesai: {} guru ditambahkan".format(len(rows))
+    return hx_render("admin/guru.jinja", push_url="admin.guru", **notif)
+
+
 # ---- Kategori (Category) CRUD ----
 
 

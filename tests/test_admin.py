@@ -260,6 +260,201 @@ def test_guru_hapus_404(logged_in_client):
     assert response.status_code == 404
 
 
+# ---- Guru Import tests ----
+
+
+def _build_guru_xlsx(rows=None):
+    from io import BytesIO
+
+    import openpyxl
+
+    if rows is None:
+        rows = []
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+
+    ws.cell(row=1, column=1, value="Username")
+    ws.cell(row=1, column=2, value="Nama")
+    ws.cell(row=1, column=3, value="Password")
+    ws.cell(row=1, column=4, value="Kontak")
+
+    for i, row_data in enumerate(rows):
+        r = 2 + i
+        for col_idx, val in enumerate(row_data, start=1):
+            ws.cell(row=r, column=col_idx, value=val)
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def test_guru_template_download(logged_in_client):
+    response = logged_in_client.get("/admin/guru/template")
+    assert response.status_code == 200
+    assert response.content_type == (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert b"PK" in response.data
+
+
+def test_guru_import_no_file(logged_in_client):
+    response = logged_in_client.post("/admin/guru/import")
+    assert response.status_code == 200
+    assert b"Tidak ada file" in response.data
+
+
+def test_guru_import_wrong_extension(logged_in_client):
+    from io import BytesIO
+
+    buf = BytesIO(b"not an xlsx")
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "data.csv")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"harus berformat" in response.data
+
+
+def test_guru_import_success(logged_in_client, app):
+    from app import db
+    from app.models import Teacher
+
+    buf = _build_guru_xlsx(
+        rows=[
+            ("budi", "Budi Santoso, S.Kom", "pass123", "081234567890"),
+            ("siti", "Siti Aminah", "", ""),
+        ]
+    )
+
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"2 guru ditambahkan" in response.data
+
+    with app.app_context():
+        assert Teacher.query.filter_by(username="budi").first() is not None
+        assert Teacher.query.filter_by(username="siti").first() is not None
+
+
+def test_guru_import_fail_fast_existing_username(logged_in_client, app):
+    from werkzeug.security import generate_password_hash
+
+    from app import db
+    from app.models import Teacher
+
+    with app.app_context():
+        existing = Teacher(
+            username="budi",
+            name="Budi Lama",
+            password=generate_password_hash("old"),
+        )
+        db.session.add(existing)
+        db.session.commit()
+
+        buf = _build_guru_xlsx(
+            rows=[
+                ("baru", "Guru Baru", "pass123", ""),
+                ("budi", "Budi Baru", "pass123", ""),
+            ]
+        )
+
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"Validasi gagal" in response.data
+    assert b"sudah digunakan" in response.data
+
+    # Fail fast: tidak ada guru baru yang diimport
+    with app.app_context():
+        assert Teacher.query.filter_by(username="baru").first() is None
+
+
+def test_guru_import_fail_fast_duplicate_in_file(logged_in_client, app):
+    from app.models import Teacher
+
+    buf = _build_guru_xlsx(
+        rows=[
+            ("budi", "Budi Satu", "pass123", ""),
+            ("budi", "Budi Dua", "pass123", ""),
+        ]
+    )
+
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"duplikat" in response.data
+
+    with app.app_context():
+        assert Teacher.query.filter_by(username="budi").count() == 0
+
+
+def test_guru_import_empty_file(logged_in_client):
+    buf = _build_guru_xlsx(rows=[])
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"Tidak ada data guru" in response.data
+
+
+def test_guru_import_strips_leading_apostrophe_in_kontak(logged_in_client, app):
+    from app.models import Teacher
+
+    # LibreOffice menyimpan awalan ' (penanda format teks) sebagai bagian
+    # dari nilai sel saat menyimpan ke xlsx
+    buf = _build_guru_xlsx(
+        rows=[("budi", "Budi Santoso", "pass123", "'081234567890")]
+    )
+
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+    assert b"1 guru ditambahkan" in response.data
+
+    with app.app_context():
+        teacher = Teacher.query.filter_by(username="budi").first()
+        assert teacher is not None
+        assert teacher.contact_person == "081234567890"
+
+
+def test_guru_import_default_password_is_username(logged_in_client, app):
+    from werkzeug.security import check_password_hash
+
+    from app import db
+    from app.models import Teacher
+
+    buf = _build_guru_xlsx(rows=[("siti", "Siti Aminah", "", "")])
+
+    response = logged_in_client.post(
+        "/admin/guru/import",
+        data={"file": (buf, "import.xlsx")},
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 200
+
+    with app.app_context():
+        teacher = Teacher.query.filter_by(username="siti").first()
+        assert teacher is not None
+        assert check_password_hash(teacher.password, "siti")
+
+
 # ---- Siswa Import tests ----
 
 

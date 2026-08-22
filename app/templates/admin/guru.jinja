@@ -11,15 +11,24 @@
 
 {{ render_notif(error, success, info) }}
 
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
     <h4 class="mb-0">Data Guru</h4>
-    <a class="btn btn-primary"
-       href="{{ url_for('admin.guru_tambah') }}"
-       hx-get="{{ url_for('admin.guru_tambah') }}"
-       hx-target="#hx_content"
-       hx-swap="innerHTML">
-        <i class="bi bi-plus-lg"></i> Tambah Guru
-    </a>
+    <div class="d-flex gap-2">
+        <a class="btn btn-primary"
+           href="{{ url_for('admin.guru_tambah') }}"
+           hx-get="{{ url_for('admin.guru_tambah') }}"
+           hx-target="#hx_content"
+           hx-swap="innerHTML">
+            <i class="bi bi-plus-lg"></i> Tambah Guru
+        </a>
+        <button type="button" class="btn btn-success" onclick="open_import_modal()">
+            <i class="bi bi-upload"></i> Import Excel
+        </button>
+        <a class="btn btn-outline-success" hx-boost="false"
+           href="{{ url_for('admin.guru_template') }}">
+            <i class="bi bi-download"></i> Download Template
+        </a>
+    </div>
 </div>
 
 <div class="table-responsive">
@@ -61,7 +70,47 @@
     </div>
 </div>
 
+<div class="modal fade" id="modalImport" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Guru dari Excel</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+            </div>
+            <form id="modalImportForm" hx-post="{{ url_for('admin.guru_import') }}"
+                  hx-target="#hx_content" hx-swap="innerHTML"
+                  enctype="multipart/form-data"
+                  onsubmit="tutup_import_modal()">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="importFile" class="form-label">Pilih file .xlsx</label>
+                        <input type="file" class="form-control" id="importFile" name="file"
+                               accept=".xlsx" required/>
+                    </div>
+                    <div class="form-text">
+                        Download template terlebih dahulu, isi data guru, lalu unggah kembali.
+                        Import akan gagal jika ada username yang sudah digunakan.
+                        Nomor HP boleh diawali ' agar tersimpan sebagai teks (dihapus otomatis).
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-success">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
+var open_import_modal = () => {
+    var modal = new bootstrap.Modal(document.getElementById('modalImport'));
+    modal.show();
+};
+var tutup_import_modal = () => {
+    bootstrap.Modal.getInstance(document.getElementById('modalImport')).hide();
+};
 var hapus_guru = (id, nama) => {
     document.getElementById('modalHapusId').value = id;
     document.getElementById('modalHapusNama').textContent = nama;
