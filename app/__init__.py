@@ -147,12 +147,13 @@ def create_app(test_config=None):
         created = run(parsed)
         print(f"{created} borrowing request(s) created.")
 
-    from . import admin, auth, siswa, supervisor
+    from . import admin, auth, pantau, siswa, supervisor
 
     app.register_blueprint(auth.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(siswa.bp)
     app.register_blueprint(supervisor.bp)
+    app.register_blueprint(pantau.bp)
     app.cli.add_command(add_admin_user)
     app.cli.add_command(delete_admin_user)
     app.cli.add_command(change_admin_user)

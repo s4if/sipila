@@ -298,6 +298,14 @@
 
         .auth-footer .bi { color: var(--sipila-accent); }
 
+        .auth-footer a {
+            color: #94a3b8;
+            text-decoration: none;
+            border-bottom: 1px dotted #94a3b8;
+        }
+
+        .auth-footer a:hover { color: var(--sipila-accent); border-bottom-color: var(--sipila-accent); }
+
         @media (max-width: 480px) {
             .auth-card { padding: 1.6rem 1.25rem 1.25rem; border-radius: 1rem; }
         }
@@ -359,6 +367,7 @@
 
         <div class="auth-footer">
             <i class="bi bi-shield-lock"></i> Sistem Peminjaman Laptop
+            &middot; <a hx-boost="False" href="{{ url_for('pantau.monitor') }}">Monitor Permintaan Hari Ini</a>
         </div>
     </div>
 </div>

@@ -18,13 +18,15 @@ sipila/
 │   ├── admin.py                # Admin blueprint (dashboard, CRUD guru/rombel/siswa/kategori/larangan/permintaan)
 │   ├── siswa.py                # Siswa blueprint (portal, permintaan CRUD)
 │   ├── supervisor.py           # Supervisor blueprint (monitor harian, konfirmasi, export XLSX)
+│   ├── pantau.py               # Pantau blueprint (monitor publik tanpa login, semua permintaan hari ini)
 │   ├── static/                 # Bootstrap 5, jQuery, DataTables, htmx, Bootstrap Icons, app.js, style.css
 │   └── templates/              # Jinja2 templates (.jinja)
 │       ├── macros.jinja        # Shared macros (render_field, render_notif)
 │       ├── login/              # Admin & siswa login pages
 │       ├── admin/              # Admin panel (layout + pages)
 │       ├── siswa/              # Siswa portal (layout + pages)
-│       └── supervisor/         # Monitor page
+│       ├── supervisor/         # Monitor page
+│       └── pantau/             # Halaman monitor publik (standalone, tanpa layout sesi)
 ├── tests/                      # pytest suite (conftest + 8 test files)
 ├── migrations/                 # Alembic migrations (tracked in git, initial revision)
 ├── docker/                     # Docker setup / post-update scripts
@@ -61,6 +63,7 @@ sipila/
 | `admin` | `app/admin.py` | `/admin` | Dashboard + CRUD guru, rombel, siswa, kategori, larangan, permintaan; XLSX template/import/export | `@admin_required` / `@superadmin_required` |
 | `siswa` | `app/siswa.py` | `/siswa` | Portal beranda, permintaan (tambah/edit/batal/detail/data), logout | `@login_required` |
 | `supervisor` | `app/supervisor.py` | `/supervisor` | Monitor harian, konfirmasi pemakaian, export laporan XLSX | `@admin_required` |
+| `pantau` | `app/pantau.py` | `/pantau` | Monitor publik hari ini (semua status, kolom Nama/Rombel/Kategori/Status) | public |
 
 New feature areas should be added as separate blueprints.
 
@@ -99,7 +102,7 @@ Conventions: foreign keys use `tablename.id`; relationships via `backref` or exp
   - **Add**: `GET/POST /admin/<entity>/tambah` — GET shows form, POST creates, redirects to list
   - **Edit**: `GET/POST /admin/<entity>/edit/<id>` — GET shows pre-filled form, POST updates
   - **Delete**: `POST /admin/<entity>/hapus` — soft delete for siswa (`is_deleted=True`), guru (`is_deleted=True`, username ditandai), dan kategori (`is_deleted=True`, name → `"[deleted]"`, link guru dibersihkan); hard delete for rombel (diblokir jika masih ada siswa aktif) dan larangan
-- JSON endpoints (always `{"data": [...]}` for DataTables): `/rombel/data`, `/siswa/data`, `/siswa/<id>/data`, `/larangan/data`, `/guru/data`, `/kategori/data`, `/permintaan/data`, `/siswa/permintaan/data`, `/supervisor/monitor/data`.
+- JSON endpoints (always `{"data": [...]}` for DataTables): `/rombel/data`, `/siswa/data`, `/siswa/<id>/data`, `/larangan/data`, `/guru/data`, `/kategori/data`, `/permintaan/data`, `/siswa/permintaan/data`, `/supervisor/monitor/data`, `/pantau/data`.
 - Pinjaman periode (peminjaman multi-hari, hanya oleh guru): `GET/POST /admin/siswa/<id>/pinjaman-periode/tambah` (form; superadmin memilih semua kategori, guru biasa hanya kategori yang diawasnya; validasi rentang, anti-overlap, start >= hari ini; jika rentang mencakup hari ini row hari ini langsung dimaterialisasi) dan `POST /admin/pinjaman-periode/batalkan/<id>` (hanya superadmin/pembuat). Tombolnya ada di halaman detail siswa. Siswa tidak bisa mengajukan manual pada tanggal yang tercakup periode aktif.
 - All page responses rendered via `hx_render()` (helper.py): injects standard context (`username`, `is_superadmin`, `student_name`, `is_htmx`) and, when `push_url=` is given, sets the `HX-Push-Url` header (accepts an endpoint name like `"siswa.beranda"` or a path).
 - Notifications passed as `notif` dict with keys `error`, `success`, `info`, rendered via `render_notif` macro.
@@ -131,6 +134,12 @@ Conventions: foreign keys use `tablename.id`; relationships via `backref` or exp
 - `/monitor/export` builds an XLSX report (openpyxl) for a date range with an optional "hanya_digunakan" filter (only confirmed `used`).
 - Konfirmasi endpoints: `/monitor/konfirmasi/<id>` and `/monitor/batalkan_konfirmasi/<id>` (JSON responses).
 
+## Pantau (Monitor Publik)
+
+- `/pantau` adalah halaman publik tanpa login untuk guru melihat sekilas semua permintaan peminjaman **hari ini** (semua status: pending/accepted/rejected), termasuk row hasil materialisasi `LoanPeriod`.
+- Kolom: Nama, Rombel, Kategori, Status (badge). Tidak menampilkan NIS/catatan/data sensitif lain.
+- `/pantau/data` selalu mengembalikan hari ini (tanpa parameter tanggal); template standalone (tanpa layout admin/siswa) dengan auto-refresh DataTables tiap 30 detik.
+
 ## XLSX Import/Export (admin)
 
 - `/admin/siswa/template` — downloadable XLSX template with mode/jumlah options (skip|update) and rombel id reference sheet.
@@ -141,7 +150,7 @@ Conventions: foreign keys use `tablename.id`; relationships via `backref` or exp
 
 - Tests in `tests/`, auto-discovered via pytest config in `pyproject.toml`.
 - `conftest.py` fixtures: `app` (in-memory SQLite, CSRF disabled), `client`, `runner`, `admin_user`, `logged_in_client`, `regular_admin`, `regular_admin_client`, `siswa_user`, `logged_in_siswa_client`, `kategori_with_teacher`, `borrowing_request`, `student_ban`, `concluded_student_ban`, `ban_by_regular_admin`.
-- Test files: `test_auth`, `test_admin`, `test_category`, `test_helper`, `test_models`, `test_permintaan`, `test_siswa`, `test_supervisor`.
+- Test files: `test_auth`, `test_admin`, `test_category`, `test_helper`, `test_models`, `test_permintaan`, `test_siswa`, `test_supervisor`, `test_pantau`.
 - Flat test functions (no classes) except grouped tests (e.g., `TestSanitizeInput`); naming `test_<what>_<condition>`.
 - Assertions check status codes, response content, JSON payloads, and redirect locations.
 - **Parallelization**: `-n auto` (pytest-xdist) is safe because the `app` fixture is function-scoped with an in-memory SQLite DB per test — no cross-test or cross-worker state. Drop to serial (`pytest --cov=app tests/`) when collecting coverage, since `pytest-cov` measures more accurately in a single process.

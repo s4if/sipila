@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <title>Monitor Permintaan Hari Ini</title>
+    <meta charset="UTF-8">
+    <meta name="description" content="Monitor permintaan peminjaman laptop hari ini">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/datatables.min.css') }}">
+    <style type="text/css">
+        body {
+            min-height: 100vh;
+            background:
+                radial-gradient(1100px 560px at 8% 6%, rgba(148, 163, 184, 0.14), transparent 60%),
+                radial-gradient(1000px 520px at 95% 96%, rgba(100, 116, 139, 0.12), transparent 60%),
+                linear-gradient(135deg, #0b1220 0%, #111c33 55%, #0b1220 100%);
+            background-attachment: fixed;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            padding: 1.5rem 1rem;
+        }
+
+        .pantau-card {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 1rem;
+            box-shadow: 0 24px 60px rgba(2, 8, 23, 0.5), 0 2px 6px rgba(2, 8, 23, 0.2);
+            overflow: hidden;
+        }
+
+        .pantau-header {
+            padding: 1.4rem 1.5rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .pantau-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            color: #94a3b8;
+            font-size: 0.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .pantau-brand .bi { color: #3b82f6; }
+
+        .pantau-title {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+
+        .pantau-title h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0;
+        }
+
+        .pantau-date {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            background: #f1f5f9;
+            color: #334155;
+            border-radius: 0.55rem;
+            padding: 0.35rem 0.7rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .pantau-body { padding: 1.25rem 1.5rem 1.5rem; }
+
+        .pantau-updated {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            color: #64748b;
+            font-size: 0.78rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .pantau-updated .btn {
+            padding: 0.1rem 0.45rem;
+            font-size: 0.75rem;
+        }
+
+        .pantau-footer {
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.78rem;
+            padding: 0.9rem 0 0.2rem;
+        }
+
+        .pantau-footer .bi { color: #3b82f6; }
+
+        table.dataTable tbody td {
+            vertical-align: middle;
+        }
+    </style>
+    <script type="text/javascript" src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <script type="text/javascript" src="{{ url_for('static', filename='js/datatables.min.js') }}"></script>
+</head>
+<body>
+<div class="pantau-card">
+    <div class="pantau-header">
+        <div class="pantau-brand">
+            <i class="bi bi-laptop"></i> {{ app_name }} &mdash; SMKIT Ihsanul Fikri Mungkid
+        </div>
+        <div class="pantau-title">
+            <h1>Permintaan Peminjaman Hari Ini</h1>
+            <span class="pantau-date">
+                <i class="bi bi-calendar3"></i> {{ tanggal_label }}
+            </span>
+        </div>
+    </div>
+
+    <div class="pantau-body">
+        <div class="pantau-updated">
+            <i class="bi bi-arrow-repeat"></i>
+            <span>Diperbarui otomatis tiap 30 detik &mdash; terakhir: <span id="pantauUpdated">-</span></span>
+            <button type="button" class="btn btn-outline-secondary" id="pantauRefresh" title="Muat ulang">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+
+        <div class="table-responsive">
+            <table id="pantauTable" class="table table-striped table-bordered table-sm">
+                <thead>
+                    <tr>
+                        <th>Nama</th>
+                        <th>Rombel</th>
+                        <th>Kategori</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="pantau-footer">
+        <i class="bi bi-shield-lock"></i> Halaman publik &mdash; hanya menampilkan nama, rombel, kategori, dan status
+    </div>
+</div>
+
+<script type="text/javascript">
+var pantauTable = null;
+
+var catat_waktu_update = function() {
+    var now = new Date();
+    document.getElementById('pantauUpdated').textContent =
+        ('0' + now.getHours()).slice(-2) + ':' +
+        ('0' + now.getMinutes()).slice(-2) + ':' +
+        ('0' + now.getSeconds()).slice(-2);
+};
+
+var muat_data = function() {
+    if (pantauTable) {
+        pantauTable.ajax.reload(null, false);
+        catat_waktu_update();
+        return;
+    }
+    pantauTable = $('#pantauTable').DataTable({
+        ajax: {
+            url: '{{ url_for("pantau.monitor_data") }}',
+            dataSrc: 'data'
+        },
+        columns: [
+            { data: 'student_name' },
+            { data: 'class_group' },
+            { data: 'category' },
+            { data: 'status' }
+        ],
+        order: [[0, 'asc']],
+        language: {
+            search: 'Cari:',
+            lengthMenu: 'Tampilkan _MENU_ data',
+            info: 'Menampilkan _START_ - _END_ dari _TOTAL_ data',
+            infoEmpty: 'Belum ada data',
+            emptyTable: 'Belum ada permintaan peminjaman hari ini',
+            zeroRecords: 'Tidak ditemukan data yang cocok',
+            paginate: { previous: 'Sebelumnya', next: 'Selanjutnya' }
+        }
+    });
+    catat_waktu_update();
+};
+
+(function() {
+    muat_data();
+    document.getElementById('pantauRefresh').addEventListener('click', muat_data);
+    setInterval(muat_data, 30000);
+})();
+</script>
+</body>
+</html>
