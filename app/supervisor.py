@@ -268,6 +268,48 @@ def monitor_konfirmasi(id):
     )
 
 
+@bp.route("/monitor/tandai_tidak_digunakan", methods=["POST"])
+@admin_required
+def monitor_tandai_tidak_digunakan():
+    teacher = _get_current_teacher()
+    if not teacher:
+        return jsonify(success=False, message="Sesi tidak valid"), 403
+
+    today = get_today()
+    tanggal = _parse_tanggal(request.form.get("tanggal"), today)
+
+    # Tandai semua permintaan diterima yang belum dikonfirmasi pada tanggal tsb
+    jumlah = (
+        BorrowingRequest.query.filter(
+            BorrowingRequest.status == "accepted",
+            BorrowingRequest.date == tanggal,
+            BorrowingRequest.confirmation.is_(None),
+        )
+        .update(
+            {
+                "confirmation": "not_used",
+                "confirmed_by": teacher.id,
+                "confirmed_at": get_now(),
+            },
+            synchronize_session=False,
+        )
+    )
+    db.session.commit()
+
+    if not jumlah:
+        return jsonify(
+            success=True,
+            message="Tidak ada permintaan yang belum dikonfirmasi",
+        )
+
+    return jsonify(
+        success=True,
+        message="{} permintaan ditandai sebagai tidak digunakan".format(
+            jumlah
+        ),
+    )
+
+
 @bp.route("/monitor/batalkan_konfirmasi/<int:id>", methods=["POST"])
 @admin_required
 def monitor_batalkan_konfirmasi(id):

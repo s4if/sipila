@@ -181,6 +181,43 @@ def test_monitor_konfirmasi_requires_login(client):
     assert "login" in response.location
 
 
+def test_monitor_tandai_tidak_digunakan(logged_in_client, app):
+    _setup_borrowing_request(app)  # belum dikonfirmasi, harus berubah
+    _setup_borrowing_request(app, confirmation="used")  # sudah ada, tetap
+    _setup_borrowing_request(app, status="pending")  # bukan diterima, tetap
+    response = logged_in_client.post("/supervisor/monitor/tandai_tidak_digunakan")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["success"] is True
+    assert "1 permintaan" in data["message"]
+
+    with app.app_context():
+        reqs = BorrowingRequest.query.all()
+        accepted = [r for r in reqs if r.status == "accepted"]
+        assert all(r.confirmation in ("not_used", "used") for r in accepted)
+        assert all(r.confirmed_by is not None for r in accepted)
+        assert all(r.confirmation is None for r in reqs if r.status == "pending")
+
+
+def test_monitor_tandai_tidak_digunakan_per_tanggal(logged_in_client, app):
+    _setup_borrowing_request(app, tanggal=date(2020, 1, 1))
+    response = logged_in_client.post("/supervisor/monitor/tandai_tidak_digunakan")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["success"] is True
+    assert "Tidak ada" in data["message"]
+
+    with app.app_context():
+        req = BorrowingRequest.query.one()
+        assert req.confirmation is None
+
+
+def test_monitor_tandai_tidak_digunakan_requires_login(client):
+    response = client.post("/supervisor/monitor/tandai_tidak_digunakan")
+    assert response.status_code == 302
+    assert "login" in response.location
+
+
 def test_monitor_batalkan_konfirmasi(logged_in_client, app):
     req_id = _setup_borrowing_request(app, confirmation="used")
     response = logged_in_client.post(

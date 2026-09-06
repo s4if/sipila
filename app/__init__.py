@@ -37,6 +37,15 @@ def create_app(test_config=None):
             app_name=APP_CONFIG["app_name"],
         )
 
+    @app.before_request
+    def _lazy_materialize_periods():
+        # Pastikan permintaan harian dari pinjaman periode selalu ada
+        # tanpa cron (lihat periods.py dan DEPLOYMENT.md). Murah: flag
+        # in-memory, sekali per hari per proses.
+        from .periods import ensure_today_materialized
+
+        ensure_today_materialized()
+
     try:
         os.makedirs(app.instance_path)
     except OSError:

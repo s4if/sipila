@@ -12,7 +12,7 @@ sipila/
 │   ├── db.py                   # SQLAlchemy + Migrate init + PRAGMA SQLite (WAL) listener
 │   ├── models.py               # All SQLAlchemy models
 │   ├── helper.py               # Role decorators, hx_render, sanitize/js_escape, get_today/get_now, htmx init
-│   ├── periods.py              # LoanPeriod lazy materialization (materialize_periods, get_active_period_for)
+│   ├── periods.py              # LoanPeriod lazy materialization (materialize_periods, ensure_today_materialized, get_active_period_for)
 │   ├── forms.py                # WTForms form classes
 │   ├── auth.py                 # Auth blueprint (admin login, siswa login, logout)
 │   ├── admin.py                # Admin blueprint (dashboard, CRUD guru/rombel/siswa/kategori/larangan/permintaan)
@@ -53,7 +53,8 @@ sipila/
 - WAL is persistent in the DB header; backups must include `app.db-wal`/`app.db-shm` or use `sqlite3 app.db ".backup '..."` (SQLite-aware copy).
 - In-memory test DBs are unaffected: Flask-SQLAlchemy forces `StaticPool` for `:memory:`.
 - Root `/` redirects to `auth.login_admin`.
-- CLI commands (`add-admin-user`, `change-admin-user`, `delete-admin-user`, `materialize-periods`): the admin commands take `--username/--password/--role` (admin|superadmin); passwords hashed with pbkdf2:sha256, `salt_length=16`. `materialize-periods [--date YYYY-MM-DD]` generates daily `BorrowingRequest` rows from active `LoanPeriod`s (lazy materialization; run daily via cron — see DEPLOYMENT.md).
+- `before_request` hook runs `ensure_today_materialized()` (`app/periods.py`): daily `BorrowingRequest` rows from active `LoanPeriod`s are generated lazily on the first request of each day (per process, in-memory flag — no cron needed; idempotent, DB failures are swallowed and retried on the next request).
+- CLI commands (`add-admin-user`, `change-admin-user`, `delete-admin-user`, `materialize-periods`): the admin commands take `--username/--password/--role` (admin|superadmin); passwords hashed with pbkdf2:sha256, `salt_length=16`. `materialize-periods [--date YYYY-MM-DD]` is the manual backfill counterpart of the lazy materialization — see DEPLOYMENT.md.
 
 ## Blueprints
 

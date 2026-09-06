@@ -1,6 +1,11 @@
 # Logika pinjaman periode (LoanPeriod): materialisasi malas row
-# BorrowingRequest harian. Dipanggil dari CLI command (cron) dan saat
-# guru membuat pinjaman periode baru yang mencakup hari ini.
+# BorrowingRequest harian. Dipanggil dari hook before_request
+# (permintaan hari ini dibuat di request pertama setiap hari — tanpa
+# cron), saat guru membuat pinjaman periode baru yang mencakup hari
+# ini, dan dari CLI command (backfill manual utk tanggal tertentu).
+
+import logging
+import threading
 
 from .db import db
 from .helper import get_today
@@ -11,6 +16,38 @@ from .models import (
     Student,
     StudentBan,
 )
+
+logger = logging.getLogger(__name__)
+
+# Flag in-memory per proses: tanggal terakhir materialisasi malas yang
+# berhasil dijalankan oleh proses ini.
+_last_ensured_date = None
+_ensure_lock = threading.Lock()
+
+
+def ensure_today_materialized():
+    # Materialisasi malas harian pengganti cron: dipanggil dari
+    # before_request (lihat create_app). Flag in-memory membuat biaya
+    # per request hanya perbandingan tanggal — setiap proses (gunicorn
+    # worker) menjalankan materialisasi maksimal sekali per hari.
+    # Kegagalan DB tidak diteruskan ke request; flag tidak di-set
+    # sehingga otomatis dicoba lagi di request berikutnya.
+    global _last_ensured_date
+    today = get_today()
+    if _last_ensured_date == today:
+        return
+    with _ensure_lock:
+        if _last_ensured_date == today:
+            return
+        try:
+            materialize_periods(today)
+            _last_ensured_date = today
+        except Exception:
+            db.session.rollback()
+            logger.exception(
+                "Materialisasi pinjaman periode harian gagal, "
+                "akan dicoba lagi di request berikutnya"
+            )
 
 
 def get_active_period_for(student_id, target_date):

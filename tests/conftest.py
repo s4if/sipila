@@ -3,6 +3,21 @@ import pytest
 from app import create_app, db
 
 
+@pytest.fixture(autouse=True)
+def _pin_materialize_flag():
+    # Materialisasi malas harian (before_request, lihat periods.py)
+    # dijadikan no-op default di test: flag global di-pin ke hari ini
+    # supaya test tidak saling terpengaruh urutan eksekusi (serial/xdist/
+    # test tunggal). Test khusus materialisasi malas me-reset flag-nya
+    # sendiri ke None.
+    from app import periods
+
+    saved = periods._last_ensured_date
+    periods._last_ensured_date = periods.get_today()
+    yield
+    periods._last_ensured_date = saved
+
+
 @pytest.fixture
 def app():
     app = create_app(

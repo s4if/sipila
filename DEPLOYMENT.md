@@ -56,28 +56,33 @@ environment:
   TZ: Asia/Jakarta   # WAJIB, jangan dihapus
 ```
 
-## Cron: generate permintaan harian dari pinjaman periode
+## Permintaan harian dari pinjaman periode (tanpa cron)
 
 Peminjaman jangka panjang (`LoanPeriod`) yang diberikan guru tidak langsung membuat
-row `BorrowingRequest`. Row harian dibuat **malas** oleh CLI command
-`materialize-periods` (idempotent — aman dijalankan berulang):
+row `BorrowingRequest`. Row harian dibuat **malas** lewat tiga jalur:
+
+1. **Otomatis di request pertama setiap hari** — hook `before_request` di
+   `create_app()` menjalankan `ensure_today_materialized()` (lihat `app/periods.py`).
+   Sebuah flag in-memory membuatnya jalan maksimal sekali per hari per proses
+   (gunicorn worker); biaya per request berikutnya hanya perbandingan tanggal.
+   Idempotent, jadi aman jika beberapa worker mengeksekusinya bersamaan. Jalur ini
+   adalah pengganti cron — cocok untuk deployment Docker tanpa akses cron host.
+2. **Saat guru membuat/mengedit periode yang mencakup hari ini** — row hari ini
+   langsung dibuat di request yang sama, jadi tidak ada celah jam antara
+   pembuatan periode dan request pertama hari itu.
+3. **CLI manual** untuk backfill tanggal yang terlewat (mis. database baru
+   di-restore dari backup):
 
 ```bash
 uv run flask --app app materialize-periods            # untuk hari ini
 uv run flask --app app materialize-periods --date 2026-08-22   # utk tanggal tertentu
-```
-
-Jalankan lewat cron sekali sehari (mis. 00:05 WIB). Contoh crontab di server
-production (di dalam container: `docker compose exec -T app ...`):
-
-```cron
-5 0 * * * cd /srv/sipila && docker compose exec -T app flask --app app materialize-periods
+# di dalam container production:
+docker compose exec -T app flask --app app materialize-periods
 ```
 
 Catatan:
 - Hari ketika siswa sedang dalam masa larangan (`StudentBan`) otomatis dilewati.
-- Jika cron terlewat beberapa hari, jalankan manual dengan `--date` per tanggal
-  yang tertinggal (urutan bebas karena command ini idempotent).
-- Saat guru membuat periode yang sudah mencakup hari ini, row hari ini langsung
-  dibuat di request yang sama — jadi tidak ada celah jam antara pembuatan dan
-  jadwal cron berikutnya.
+- Cron luar (mis. 00:05 WIB memanggil CLI di atas) tetap boleh dipasang supaya
+  row tersedia tepat tengah malam, tapi **tidak wajib** — tanpa cron, row dibuat
+  saat request pertama hari itu masuk. Karena query laporan memfilter berdasar
+  kolom `date`, waktu row dibuat tidak memengaruhi laporan.

@@ -262,6 +262,82 @@ def test_cli_materialize_invalid_date(app, runner):
     assert "YYYY-MM-DD" in result.output
 
 
+# ---- Materialisasi malas per request (ensure_today_materialized) ----
+
+
+def test_ensure_materializes_active_period(
+    app, siswa_user, kategori_with_teacher, admin_user
+):
+    from app import periods
+    from app.periods import ensure_today_materialized
+
+    _make_period(siswa_user, kategori_with_teacher, admin_user)
+    periods._last_ensured_date = None
+
+    ensure_today_materialized()
+    req = BorrowingRequest.query.filter_by(
+        student_id=siswa_user.id, date=get_today()
+    ).one()
+    assert req.status == "accepted"
+    assert periods._last_ensured_date == get_today()
+
+
+def test_ensure_runs_once_per_day(app, monkeypatch):
+    # Flag in-memory mencegah pemanggilan berulang di request berikutnya
+    from app import periods
+    from app.periods import ensure_today_materialized
+
+    periods._last_ensured_date = None
+    calls = []
+    monkeypatch.setattr(
+        periods, "materialize_periods", lambda d=None: calls.append(d)
+    )
+
+    ensure_today_materialized()
+    ensure_today_materialized()
+    assert len(calls) == 1
+
+
+def test_ensure_failure_swallowed_and_retried(app, monkeypatch):
+    # Kegagalan DB tidak boleh memutus request; flag belum ter-set
+    # sehingga dicoba lagi di request berikutnya
+    from app import periods
+    from app.periods import ensure_today_materialized
+
+    periods._last_ensured_date = None
+
+    def boom(d=None):
+        raise RuntimeError("tes gagal db")
+
+    monkeypatch.setattr(periods, "materialize_periods", boom)
+    ensure_today_materialized()  # tidak raise
+    assert periods._last_ensured_date is None
+
+    calls = []
+    monkeypatch.setattr(
+        periods, "materialize_periods", lambda d=None: calls.append(d)
+    )
+    ensure_today_materialized()  # dicoba lagi
+    assert len(calls) == 1
+
+
+def test_request_triggers_materialization(
+    client, siswa_user, kategori_with_teacher, admin_user
+):
+    # Request pertama pada hari itu memicu materialisasi otomatis —
+    # halaman publik /pantau cukup sebagai pemicu, tanpa login
+    from app import periods
+
+    _make_period(siswa_user, kategori_with_teacher, admin_user)
+    periods._last_ensured_date = None
+
+    response = client.get("/pantau/data")
+    assert response.status_code == 200
+    # Row hasil materialisasi langsung terlihat di monitor
+    assert len(response.get_json()["data"]) == 1
+    assert periods._last_ensured_date == get_today()
+
+
 # ---- Route: tambah pinjaman periode ----
 
 
