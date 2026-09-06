@@ -24,6 +24,7 @@ from .helper import (
     superadmin_required,
 )
 from .models import (
+    AssignedReviewer,
     BorrowingRequest,
     Category,
     CategoryTeacher,
@@ -746,8 +747,11 @@ def _siswa_requests_query(student_id, start_date=None, end_date=None):
 
     if not session.get("is_superadmin", False):
         teacher = _get_current_teacher()
-        category_ids = _get_teacher_category_ids(teacher.id)
-        query = query.filter(BorrowingRequest.category_id.in_(category_ids))
+        query = query.filter(
+            BorrowingRequest.assigned_reviewers.any(
+                AssignedReviewer.teacher_id == teacher.id
+            )
+        )
 
     return query.order_by(
         BorrowingRequest.date.desc(), BorrowingRequest.id.desc()
@@ -1925,10 +1929,10 @@ def _get_teacher_category_ids(teacher_id):
     ]
 
 
-def _teacher_can_review(teacher_id, category_id):
+def _teacher_can_review(teacher_id, request_id):
     return (
-        CategoryTeacher.query.filter_by(
-            teacher_id=teacher_id, category_id=category_id
+        AssignedReviewer.query.filter_by(
+            teacher_id=teacher_id, request_id=request_id
         ).first()
         is not None
     )
@@ -1951,7 +1955,6 @@ def permintaan_data():
 
     teacher = _get_current_teacher()
     is_superadmin = session.get("is_superadmin", False)
-    teacher_category_ids = _get_teacher_category_ids(teacher.id)
 
     query = BorrowingRequest.query.options(
         joinedload(BorrowingRequest.student).joinedload(Student.class_group),
@@ -1960,7 +1963,9 @@ def permintaan_data():
 
     if not is_superadmin:
         query = query.filter(
-            BorrowingRequest.category_id.in_(teacher_category_ids)
+            BorrowingRequest.assigned_reviewers.any(
+                AssignedReviewer.teacher_id == teacher.id
+            )
         )
 
     today = get_today()
@@ -2031,22 +2036,17 @@ def permintaan_detail(id):
             ),
             joinedload(BorrowingRequest.category),
             joinedload(BorrowingRequest.reviewer),
+            joinedload(BorrowingRequest.assigned_reviewers).joinedload(
+                AssignedReviewer.teacher
+            ),
         ],
     )
-    can_review = _teacher_can_review(teacher.id, req.category_id)
-    category_teachers = (
-        Teacher.query.join(
-            CategoryTeacher, CategoryTeacher.teacher_id == Teacher.id
-        )
-        .filter(CategoryTeacher.category_id == req.category_id)
-        .all()
-    )
+    can_review = _teacher_can_review(teacher.id, req.id)
 
     return hx_render(
         "admin/permintaan_detail.jinja",
         req=req,
         can_review=can_review,
-        category_teachers=category_teachers,
     )
 
 
@@ -2056,7 +2056,7 @@ def permintaan_terima(id):
     teacher = _get_current_teacher()
     req = db.get_or_404(BorrowingRequest, id)
 
-    if not _teacher_can_review(teacher.id, req.category_id):
+    if not _teacher_can_review(teacher.id, req.id):
         return hx_render(
             "admin/permintaan_detail.jinja",
             req=req,
@@ -2095,7 +2095,7 @@ def permintaan_tolak(id):
     teacher = _get_current_teacher()
     req = db.get_or_404(BorrowingRequest, id)
 
-    if not _teacher_can_review(teacher.id, req.category_id):
+    if not _teacher_can_review(teacher.id, req.id):
         return hx_render(
             "admin/permintaan_detail.jinja",
             req=req,
@@ -2134,7 +2134,7 @@ def permintaan_batalkan(id):
     teacher = _get_current_teacher()
     req = db.get_or_404(BorrowingRequest, id)
 
-    if not _teacher_can_review(teacher.id, req.category_id):
+    if not _teacher_can_review(teacher.id, req.id):
         return hx_render(
             "admin/permintaan_detail.jinja",
             req=req,

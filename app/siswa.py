@@ -5,7 +5,14 @@ from flask import Blueprint, jsonify, redirect, request, session, url_for
 from .db import db
 from .forms import PermintaanSiswaForm
 from .helper import get_today, hx_render, login_required, sanitize
-from .models import BorrowingRequest, Category, StudentBan
+from .models import (
+    AssignedReviewer,
+    BorrowingRequest,
+    Category,
+    CategoryTeacher,
+    StudentBan,
+    Teacher,
+)
 from .periods import get_active_period_for
 
 bp = Blueprint("siswa", __name__, url_prefix="/siswa")
@@ -15,6 +22,51 @@ def _date_range():
     min_date = get_today()
     max_date = min_date + timedelta(days=7)
     return min_date, max_date
+
+
+def _category_choices():
+    # Kategori opsional: pilihan pertama "Tanpa Kategori" (nilai kosong)
+    return [("", "Tanpa Kategori")] + [
+        (c.id, c.name)
+        for c in Category.query.filter_by(is_deleted=False)
+        .order_by(Category.name)
+        .all()
+    ]
+
+
+def _reviewer_choices():
+    # Siswa bebas memilih guru mana pun yang masih aktif
+    return [
+        (t.id, t.name or t.username)
+        for t in Teacher.query.filter_by(is_deleted=False)
+        .order_by(Teacher.name)
+        .all()
+    ]
+
+
+def _category_default_reviewers(category_id):
+    # Preselect bawaan: guru pengawas kategori (yang masih aktif)
+    return [
+        t.id
+        for t in Teacher.query.join(
+            CategoryTeacher, CategoryTeacher.teacher_id == Teacher.id
+        )
+        .filter(
+            CategoryTeacher.category_id == category_id,
+            Teacher.is_deleted.is_(False),
+        )
+        .all()
+    ]
+
+
+def _saved_reviewers(form, req):
+    # Penunjukan tersimpan; guru yang sudah dihapus tidak ditawarkan lagi
+    active_ids = {tid for tid, _ in form.reviewers.choices}
+    return [
+        ar.teacher_id
+        for ar in req.assigned_reviewers
+        if ar.teacher_id in active_ids
+    ]
 
 
 @bp.route("/")
@@ -113,12 +165,8 @@ def permintaan_tambah():
 
     min_date, max_date = _date_range()
     form = PermintaanSiswaForm()
-    form.category_id.choices = [
-        (c.id, c.name)
-        for c in Category.query.filter_by(is_deleted=False)
-        .order_by(Category.name)
-        .all()
-    ]
+    form.category_id.choices = _category_choices()
+    form.reviewers.choices = _reviewer_choices()
     if request.method == "GET":
         return hx_render(
             "siswa/permintaan_form.jinja",
@@ -191,6 +239,9 @@ def permintaan_tambah():
         date=form.date.data,
         status="pending",
         student_note=sanitize(form.student_note.data) or None,
+        assigned_reviewers=[
+            AssignedReviewer(teacher_id=tid) for tid in form.reviewers.data
+        ],
     )
     db.session.add(req)
     db.session.commit()
@@ -223,16 +274,13 @@ def permintaan_edit(id):
         return redirect(url_for("siswa.beranda"))
 
     form = PermintaanSiswaForm(obj=req)
-    form.category_id.choices = [
-        (c.id, c.name)
-        for c in Category.query.filter_by(is_deleted=False)
-        .order_by(Category.name)
-        .all()
-    ]
+    form.category_id.choices = _category_choices()
+    form.reviewers.choices = _reviewer_choices()
     if request.method == "GET":
         form.date.data = req.date
         form.category_id.data = req.category_id
         form.student_note.data = req.student_note
+        form.reviewers.data = _saved_reviewers(form, req)
         return hx_render(
             "siswa/permintaan_form.jinja",
             form=form,
@@ -304,9 +352,56 @@ def permintaan_edit(id):
     req.category_id = form.category_id.data
     req.date = form.date.data
     req.student_note = sanitize(form.student_note.data) or None
+    _sync_reviewers(req, form.reviewers.data)
     db.session.commit()
     notif["success"] = "Permintaan berhasil diperbarui"
     return hx_render("siswa/beranda.jinja", push_url="siswa.beranda", **notif)
+
+
+def _sync_reviewers(req, teacher_ids):
+    # Sinkron penunjukan pereview: hapus yang dicabut, tambah yang baru.
+    # Replace koleksi sekaligus tidak bisa dipakai karena constraint
+    # unik (request_id, teacher_id) — INSERT dieksekusi sebelum DELETE
+    # lama saat flush bila pereview sama dipilih kembali.
+    keep = list(dict.fromkeys(teacher_ids))  # dedupe, jaga urutan
+    existing = {ar.teacher_id: ar for ar in req.assigned_reviewers}
+    for tid in list(existing):
+        if tid not in keep:
+            db.session.delete(existing[tid])
+    for tid in keep:
+        if tid not in existing:
+            req.assigned_reviewers.append(
+                AssignedReviewer(teacher_id=tid)
+            )
+
+
+@bp.route("/permintaan/reviewer-pilihan")
+@login_required
+def reviewer_pilihan():
+    # Fragment HTMX: render ulang pilihan guru pereview saat kategori
+    # diganti. Preselect = guru pengawas kategori baru; jika kategori
+    # sama dengan permintaan yang sedang diedit, pakai penunjukan
+    # tersimpan supaya tidak hilang saat ganti-ganti kategori.
+    category_id = request.args.get("category_id", type=int)
+    req_id = request.args.get("req_id", type=int)
+
+    form = PermintaanSiswaForm()
+    form.reviewers.choices = _reviewer_choices()
+
+    req = None
+    if req_id:
+        req = db.session.get(BorrowingRequest, req_id)
+        if req and req.student_id != session["student_db_id"]:
+            req = None
+
+    selected = []
+    if req and category_id == req.category_id:
+        selected = _saved_reviewers(form, req)
+    if not selected and category_id:
+        selected = _category_default_reviewers(category_id)
+    form.reviewers.data = selected
+
+    return hx_render("siswa/_reviewer_field.jinja", form=form)
 
 
 @bp.route("/permintaan/batal", methods=["POST"])

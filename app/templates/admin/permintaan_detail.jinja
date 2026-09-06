@@ -71,12 +71,12 @@
                         </td>
                     </tr>
                     <tr>
-                        <th class="ps-0">Penanggung Jawab</th>
+                        <th class="ps-0">Guru Pereview</th>
                         <td>
-                            {% if category_teachers %}
+                            {% if req.assigned_reviewers %}
                                 <ul class="list-unstyled mb-0">
-                                {% for teacher in category_teachers %}
-                                    <li>- {{ teacher.name }}</li>
+                                {% for ar in req.assigned_reviewers %}
+                                    <li>- {{ ar.teacher.name or ar.teacher.username if ar.teacher else '-' }}</li>
                                 {% endfor %}
                                 </ul>
                             {% else %}

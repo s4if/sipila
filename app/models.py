@@ -200,8 +200,11 @@ class BorrowingRequest(db.Model):
     student_id = db.Column(
         db.Integer, db.ForeignKey("students.id"), nullable=False
     )
+    # Kategori opsional: sejak penunjukan pereview dipindah ke
+    # AssignedReviewer, kategori hanya informatif (laporan + preselect
+    # guru pereview) sehingga boleh kosong.
     category_id = db.Column(
-        db.Integer, db.ForeignKey("categories.id"), nullable=False
+        db.Integer, db.ForeignKey("categories.id"), nullable=True
     )
     # Terisi jika row ini digenerate dari LoanPeriod (izin panjang).
     # Saat LoanPeriod dihapus, FK ini di-set NULL oleh DB (ON DELETE SET
@@ -247,4 +250,43 @@ class BorrowingRequest(db.Model):
     def __repr__(self):
         return "<BorrowingRequest student={} date={} status={}>".format(
             self.student_id, self.date, self.status
+        )
+
+class AssignedReviewer(db.Model):
+    # Penunjukan guru pereview per permintaan. Awalnya di-preselect dari
+    # guru pengawas kategori (CategoryTeacher), tapi siswa boleh mengubah
+    # pilihannya; hanya guru pada tabel ini yang boleh menyetujui
+    # BorrowingRequest terkait (menggantikan aturan berbasis kategori).
+    __tablename__ = "assigned_reviewers"
+    __table_args__ = (db.UniqueConstraint("request_id", "teacher_id"),)
+    id = db.Column(db.Integer, primary_key=True)
+    request_id = db.Column(
+        db.Integer,
+        db.ForeignKey("borrowing_requests.id"),
+        nullable=False,
+        index=True,
+    )
+    teacher_id = db.Column(
+        db.Integer,
+        db.ForeignKey("teachers.id"),
+        nullable=False,
+        index=True,
+    )
+    assigned_at = db.Column(
+        db.DateTime, nullable=False, default=get_now
+    )
+
+    # Saat permintaan dihapus (mis. dibatalkan siswa), baris penunjukan
+    # ikut dihapus; riwayat tetap merujuk teacher_id yang soft-delete.
+    request = db.relationship(
+        "BorrowingRequest",
+        backref=db.backref(
+            "assigned_reviewers", cascade="all, delete-orphan"
+        ),
+    )
+    teacher = db.relationship("Teacher", backref="assigned_reviews")
+
+    def __repr__(self):
+        return "<AssignedReviewer request={} teacher={}>".format(
+            self.request_id, self.teacher_id
         )

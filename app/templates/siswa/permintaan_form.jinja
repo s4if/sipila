@@ -25,7 +25,21 @@
                     {% endif %}
                     hx-boost="false">
                     {{ form.csrf_token }}
-                    {{ render_field(form.category_id) }}
+                    {% if req %}
+                        {% set reviewer_url = url_for('siswa.reviewer_pilihan', req_id=req.id) %}
+                    {% else %}
+                        {% set reviewer_url = url_for('siswa.reviewer_pilihan') %}
+                    {% endif %}
+                    {# attr hx-* harus lewat dict splat: WTForms tidak
+                       mengubah hx_get menjadi hx-get #}
+                    {{ render_field(form.category_id, **{
+                        'hx-get': reviewer_url,
+                        'hx-trigger': 'change',
+                        'hx-target': '#field-reviewer',
+                        'hx-include': 'this'}) }}
+                    <div id="field-reviewer">
+                        {% include 'siswa/_reviewer_field.jinja' %}
+                    </div>
                     {{ render_field(form.date, type='date', min=min_date, max=max_date) }}
                     {{ render_field(form.student_note) }}
                     <button type="submit" class="btn btn-primary">

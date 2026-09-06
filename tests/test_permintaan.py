@@ -5,9 +5,15 @@ from app.models import BorrowingRequest, Category, CategoryTeacher
 
 
 def _make_request(
-    student_id, category_id, status="pending", offset_days=1, reviewed_by=None
+    student_id,
+    category_id,
+    status="pending",
+    offset_days=1,
+    reviewed_by=None,
+    assign_to=None,
 ):
     from app.helper import get_today
+    from app.models import AssignedReviewer
 
     req = BorrowingRequest(
         student_id=student_id,
@@ -18,6 +24,10 @@ def _make_request(
     )
     db.session.add(req)
     db.session.flush()
+    if assign_to is not None:
+        db.session.add(
+            AssignedReviewer(request_id=req.id, teacher_id=assign_to)
+        )
     return req
 
 
@@ -31,33 +41,35 @@ def test_permintaan_data_returns_json(logged_in_client):
     assert "data" in data
 
 
-def test_permintaan_data_filters_by_teacher_category(
+def test_permintaan_data_filters_by_assigned_reviewer(
     app, regular_admin_client, regular_admin, siswa_user
 ):
     with app.app_context():
+        from app.models import AssignedReviewer
+
         cat_a = Category(name="A")
         cat_b = Category(name="B")
         db.session.add_all([cat_a, cat_b])
         db.session.flush()
-        db.session.add(
-            CategoryTeacher(category_id=cat_a.id, teacher_id=regular_admin.id)
+        req_a = BorrowingRequest(
+            student_id=siswa_user.id,
+            category_id=cat_a.id,
+            date=date.today(),
+            status="pending",
         )
+        req_b = BorrowingRequest(
+            student_id=siswa_user.id,
+            category_id=cat_b.id,
+            date=date.today() + timedelta(days=1),
+            status="pending",
+        )
+        db.session.add_all([req_a, req_b])
         db.session.flush()
-        db.session.add_all(
-            [
-                BorrowingRequest(
-                    student_id=siswa_user.id,
-                    category_id=cat_a.id,
-                    date=date.today(),
-                    status="pending",
-                ),
-                BorrowingRequest(
-                    student_id=siswa_user.id,
-                    category_id=cat_b.id,
-                    date=date.today() + timedelta(days=1),
-                    status="pending",
-                ),
-            ]
+        # hanya ditugaskan pada permintaan A
+        db.session.add(
+            AssignedReviewer(
+                request_id=req_a.id, teacher_id=regular_admin.id
+            )
         )
         db.session.commit()
 
@@ -172,11 +184,14 @@ def test_permintaan_terima_not_authorized(
 
 
 def test_permintaan_terima_already_reviewed(
-    app, logged_in_client, siswa_user, kategori_with_teacher
+    app, logged_in_client, siswa_user, kategori_with_teacher, admin_user
 ):
     with app.app_context():
         req = _make_request(
-            siswa_user.id, kategori_with_teacher.id, status="accepted"
+            siswa_user.id,
+            kategori_with_teacher.id,
+            status="accepted",
+            assign_to=admin_user.id,
         )
         db.session.commit()
         req_id = req.id
@@ -259,11 +274,14 @@ def test_permintaan_tolak_not_authorized(
 
 
 def test_permintaan_tolak_already_reviewed(
-    app, logged_in_client, siswa_user, kategori_with_teacher
+    app, logged_in_client, siswa_user, kategori_with_teacher, admin_user
 ):
     with app.app_context():
         req = _make_request(
-            siswa_user.id, kategori_with_teacher.id, status="rejected"
+            siswa_user.id,
+            kategori_with_teacher.id,
+            status="rejected",
+            assign_to=admin_user.id,
         )
         db.session.commit()
         req_id = req.id
@@ -292,6 +310,7 @@ def test_permintaan_batalkan_success(
             kategori_with_teacher.id,
             status="accepted",
             reviewed_by=admin_user.id,
+            assign_to=admin_user.id,
         )
         db.session.commit()
         req_id = req.id
@@ -333,14 +352,14 @@ def test_permintaan_batalkan_after_cutoff(
     app, logged_in_client, admin_user, siswa_user, kategori_with_teacher
 ):
     with app.app_context():
-        req = BorrowingRequest(
-            student_id=siswa_user.id,
-            category_id=kategori_with_teacher.id,
-            date=date.today() - timedelta(days=1),
+        req = _make_request(
+            siswa_user.id,
+            kategori_with_teacher.id,
             status="accepted",
+            offset_days=-1,
             reviewed_by=admin_user.id,
+            assign_to=admin_user.id,
         )
-        db.session.add(req)
         db.session.commit()
         req_id = req.id
 
@@ -352,10 +371,14 @@ def test_permintaan_batalkan_after_cutoff(
 
 
 def test_permintaan_batalkan_reversible(
-    app, logged_in_client, siswa_user, kategori_with_teacher
+    app, logged_in_client, siswa_user, kategori_with_teacher, admin_user
 ):
     with app.app_context():
-        req = _make_request(siswa_user.id, kategori_with_teacher.id)
+        req = _make_request(
+            siswa_user.id,
+            kategori_with_teacher.id,
+            assign_to=admin_user.id,
+        )
         db.session.commit()
         req_id = req.id
 

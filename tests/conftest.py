@@ -129,9 +129,9 @@ def kategori_with_teacher(app, admin_user):
 
 
 @pytest.fixture
-def borrowing_request(app, siswa_user, kategori_with_teacher):
+def borrowing_request(app, siswa_user, kategori_with_teacher, admin_user):
     from app.helper import get_today
-    from app.models import BorrowingRequest
+    from app.models import AssignedReviewer, BorrowingRequest
 
     req = BorrowingRequest(
         student_id=siswa_user.id,
@@ -140,6 +140,10 @@ def borrowing_request(app, siswa_user, kategori_with_teacher):
         status="pending",
     )
     db.session.add(req)
+    db.session.flush()
+    db.session.add(
+        AssignedReviewer(request_id=req.id, teacher_id=admin_user.id)
+    )
     db.session.commit()
     return req
 

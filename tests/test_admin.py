@@ -1497,7 +1497,8 @@ def test_siswa_detail_export_404(logged_in_client):
 def test_siswa_detail_regular_admin_category_filter(
     regular_admin_client, app, regular_admin
 ):
-    # siswa has requests in a category the regular admin does NOT manage
+    # siswa has requests but the regular admin is not an assigned
+    # reviewer on any of them
     student_id = _make_student_with_requests(
         app, [("2025-01-10", "accepted")]
     )
@@ -1506,7 +1507,7 @@ def test_siswa_detail_regular_admin_category_filter(
     )
     assert response.status_code == 200
     data = response.get_json()
-    # regular admin manages no categories -> sees no requests
+    # regular admin is not assigned to any request -> sees no requests
     assert len(data["data"]) == 0
 
 

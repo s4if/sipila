@@ -4,7 +4,13 @@
 
 from .db import db
 from .helper import get_today
-from .models import BorrowingRequest, LoanPeriod, Student, StudentBan
+from .models import (
+    AssignedReviewer,
+    BorrowingRequest,
+    LoanPeriod,
+    Student,
+    StudentBan,
+)
 
 
 def get_active_period_for(student_id, target_date):
@@ -63,6 +69,11 @@ def materialize_periods(target_date=None):
                 teacher_note=period.note,
                 reviewed_at=period.created_at,
                 loan_period_id=period.id,
+                # Guru pemberi izin dicatat sebagai pereview agar tetap
+                # terlihat di daftar permintaan miliknya
+                assigned_reviewers=[
+                    AssignedReviewer(teacher_id=period.created_by)
+                ],
             )
         )
         created += 1

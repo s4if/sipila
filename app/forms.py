@@ -10,6 +10,20 @@ from wtforms import (
 from wtforms.validators import DataRequired, EqualTo, Optional
 
 
+def _optional_int(value):
+    # Pilihan kosong ("") menjadi None agar bisa disimpan sebagai NULL
+    return int(value) if value else None
+
+
+class OptionalSelectField(SelectField):
+    # SelectField opsional: pilihan kosong dilewati saat cek daftar
+    # pilihan sehingga lolos validasi
+    def pre_validate(self, form):
+        if self.data is None:
+            return
+        super().pre_validate(form)
+
+
 class LoginForm(FlaskForm):
     username = StringField("Username", validators=[DataRequired()])
     password = PasswordField("Password", validators=[DataRequired()])
@@ -40,8 +54,15 @@ class SiswaLoginForm(FlaskForm):
 
 
 class PermintaanSiswaForm(FlaskForm):
-    category_id = SelectField(
-        "Kategori", coerce=int, validators=[DataRequired()]
+    category_id = OptionalSelectField(
+        "Kategori", coerce=_optional_int, validators=[Optional()]
+    )
+    reviewers = SelectMultipleField(
+        "Guru Pereview",
+        coerce=int,
+        validators=[
+            DataRequired(message="Pilih minimal satu guru pereview")
+        ],
     )
     date = DateField(
         "Tanggal Pinjam", validators=[DataRequired()], format="%Y-%m-%d"

@@ -86,7 +86,7 @@ def test_siswa_permintaan_tambah_page_get(
 
 
 def test_siswa_permintaan_tambah_success(
-    app, logged_in_siswa_client, siswa_user, kategori_with_teacher
+    app, logged_in_siswa_client, siswa_user, kategori_with_teacher, admin_user
 ):
     from app.helper import get_today
 
@@ -96,6 +96,7 @@ def test_siswa_permintaan_tambah_success(
             "category_id": kategori_with_teacher.id,
             "date": get_today().isoformat(),
             "student_note": "catatan",
+            "reviewers": [str(admin_user.id)],
         },
     )
     assert response.status_code == 200
@@ -107,15 +108,19 @@ def test_siswa_permintaan_tambah_success(
         ).first()
         assert req is not None
         assert req.category_id == kategori_with_teacher.id
+        assert [ar.teacher_id for ar in req.assigned_reviewers] == [
+            admin_user.id
+        ]
 
 
 def test_siswa_permintaan_tambah_duplicate_date(
-    logged_in_siswa_client, kategori_with_teacher
+    app, logged_in_siswa_client, kategori_with_teacher, admin_user
 ):
     payload = {
         "category_id": kategori_with_teacher.id,
         "date": date.today().isoformat(),
         "student_note": "",
+        "reviewers": [str(admin_user.id)],
     }
     logged_in_siswa_client.post("/siswa/permintaan/tambah", data=payload)
     response = logged_in_siswa_client.post(
@@ -126,7 +131,7 @@ def test_siswa_permintaan_tambah_duplicate_date(
 
 
 def test_siswa_permintaan_tambah_outside_range(
-    logged_in_siswa_client, kategori_with_teacher
+    app, logged_in_siswa_client, kategori_with_teacher, admin_user
 ):
     from app.helper import get_today
 
@@ -137,6 +142,7 @@ def test_siswa_permintaan_tambah_outside_range(
             "category_id": kategori_with_teacher.id,
             "date": yesterday,
             "student_note": "",
+            "reviewers": [str(admin_user.id)],
         },
     )
     assert response.status_code == 200
@@ -172,7 +178,11 @@ def test_siswa_permintaan_edit_page_get(
 
 
 def test_siswa_permintaan_edit_success(
-    app, logged_in_siswa_client, borrowing_request, kategori_with_teacher
+    app,
+    logged_in_siswa_client,
+    borrowing_request,
+    kategori_with_teacher,
+    regular_admin,
 ):
     tomorrow = (date.today() + timedelta(days=1)).isoformat()
     response = logged_in_siswa_client.post(
@@ -181,6 +191,7 @@ def test_siswa_permintaan_edit_success(
             "category_id": kategori_with_teacher.id,
             "date": tomorrow,
             "student_note": "diubah",
+            "reviewers": [str(regular_admin.id)],
         },
     )
     assert response.status_code == 200
@@ -190,6 +201,10 @@ def test_siswa_permintaan_edit_success(
         req = db.session.get(BorrowingRequest, borrowing_request.id)
         assert req.date == date.today() + timedelta(days=1)
         assert req.student_note == "diubah"
+        # penunjukan lama diganti dengan isi form (delete + recreate)
+        assert [ar.teacher_id for ar in req.assigned_reviewers] == [
+            regular_admin.id
+        ]
 
 
 def test_siswa_permintaan_edit_not_own(
@@ -236,7 +251,11 @@ def test_siswa_permintaan_edit_not_pending(
 
 
 def test_siswa_permintaan_edit_duplicate_date(
-    app, logged_in_siswa_client, siswa_user, kategori_with_teacher
+    app,
+    logged_in_siswa_client,
+    siswa_user,
+    kategori_with_teacher,
+    admin_user,
 ):
     today = date.today()
     tomorrow = today + timedelta(days=1)
@@ -263,6 +282,7 @@ def test_siswa_permintaan_edit_duplicate_date(
             "category_id": kategori_with_teacher.id,
             "date": tomorrow.isoformat(),
             "student_note": "",
+            "reviewers": [str(admin_user.id)],
         },
     )
     assert response.status_code == 200

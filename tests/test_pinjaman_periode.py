@@ -740,6 +740,7 @@ def test_siswa_manual_request_blocked_within_period(
         "category_id": kategori_with_teacher.id,
         "date": (today + timedelta(days=1)).isoformat(),
         "student_note": "coba ajukan manual",
+        "reviewers": [str(admin_user.id)],
     }
     response = logged_in_siswa_client.post("/siswa/permintaan/tambah", data=data)
     html = response.get_data(as_text=True)
@@ -762,6 +763,7 @@ def test_siswa_manual_request_allowed_outside_period(
     data = {
         "category_id": kategori_with_teacher.id,
         "date": (today + timedelta(days=1)).isoformat(),
+        "reviewers": [str(admin_user.id)],
     }
     response = logged_in_siswa_client.post("/siswa/permintaan/tambah", data=data)
     html = response.get_data(as_text=True)

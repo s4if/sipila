@@ -1,0 +1,17 @@
+{# Fragment pilihan guru pereview; di-swap HTMX saat kategori berubah.
+   Struktur meniru render_field agar konsisten dengan form permintaan. #}
+<div class="row mb-3 ml-3">
+    {{ form.reviewers.label(class_='col-md-2 col-sm-3 col-form-label') }}
+    <div class="col-md-9 col-sm-8">
+        {{ form.reviewers(class_='form-select gx-10' + (' is-invalid' if form.reviewers.errors else ''), size='8') }}
+        <div class="form-text">
+            Tahan Ctrl/Cmd untuk memilih lebih dari satu.
+            Bawaan: guru pengawas kategori terpilih.
+        </div>
+        {% if form.reviewers.errors %}
+        <div class="invalid-feedback">
+            {% for error in form.reviewers.errors %}{{ error }}{% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
